@@ -1,0 +1,28 @@
+# Local data and logs
+/data
+logs/
+/trash
+
+# Models (typo fix: modles -> models)
+/models/
+
+# Virtual environment
+/venv
+CTR-GCN/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Output files
+/outputs/
+
+# IDE
+.vscode/
+.idea/
+.roo/
+
+# OS files
+.DS_Store
+Thumbs.db

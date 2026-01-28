@@ -1,0 +1,55 @@
+config: resgcn_coco
+dataset: coco
+gpus: [0]
+seed: 1
+work_dir: './work_dir'
+no_progress_bar: False
+
+dataset_args:
+  coco:
+    input_path: ../../outputs/json  # COCO 數據集路徑
+    path: ../../outputs
+    use_gait: false  # 不使用步態參數
+    train_batch_size: 16
+    eval_batch_size: 16
+    seed: 42
+    metadata_path: ../../outputs/json/analysis_metadata.csv
+    # 數據文件路徑（由Generator生成）
+    data_path: ../../outputs/coco/train_data.npy
+    label_path: ../../outputs/coco/train_label.pkl
+    eval_data_path: ../../outputs/coco/test_data.npy
+    eval_label_path: ../../outputs/coco/test_label.pkl
+    test_phase: true
+    use_ldl: true  # 使用 Label Distribution Learning
+    ldl_config:
+      - {start: 12, end: 18, sigma: 2.0, beta: 2.0}
+      - {start: 18, end: 26, sigma: 2.0, beta: 2.0}
+      - {start: 26, end: 35, sigma: 2.0, beta: 2.0}
+    num_class: 24  # 年齡範圍 12-35，共 24 類
+    ldl_min_label: 12  # 最小月齡
+    ldl_max_label: 35  # 最大月齡
+
+model_type: pa-resgcn-b15
+model_args:
+  gait_dim: null  # 不使用 gait
+  kernel_size: [5,2]
+
+optimizer: SGD
+optimizer_args:
+  SGD:
+    lr: 0.01
+    momentum: 0.9
+    nesterov: true
+    weight_decay: 0.001
+
+lr_scheduler: cosine
+scheduler_args:
+  cosine:
+    max_epoch: 100
+    warm_up: 8
+    eta_min: 1e-6
+
+# Loss function settings
+use_ldl: true  # 使用 Label Distribution Learning
+loss_type: kl   # 損失函數類型：mse, mae, 或 kl
+reg_weight: 1.0 # MAE Regularization weight

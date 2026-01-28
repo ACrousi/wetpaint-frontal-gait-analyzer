@@ -1,0 +1,29 @@
+config: gait_mlp_coco
+model_type: gaitmlp
+dataset: coco
+gpus: [0]
+seed: 1
+
+dataset_args:
+  coco:
+    path: ./data
+    use_gait: true  # 必須啟用
+    gait_columns: ['step_length', 'step_width', 'step_time', 'velocity']  # 定義步態特徵
+    train_batch_size: 64
+    eval_batch_size: 64
+    metadata_path: ./outputs/2025.csv
+
+model_args:
+  input_dim: 4  # 步態參數維度（與 gait_columns 數量一致）
+  hidden_dims: [128, 64]
+  dropout: 0.5
+
+optimizer: Adam
+optimizer_args:
+  Adam:
+    lr: 0.001
+
+lr_scheduler: cosine
+scheduler_args:
+  cosine:
+    max_epoch: 100

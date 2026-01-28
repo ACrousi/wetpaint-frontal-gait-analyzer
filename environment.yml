@@ -1,0 +1,50 @@
+name: video-processing
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.8
+  - pytorch=1.13.1
+  - torchvision=0.14.1
+  - torchaudio=0.13.1
+  - pytorch-cuda=11.7
+  - numpy
+  - tqdm
+  - loguru
+  - scikit-image
+  - scikit-learn
+  - pillow
+  - h5py
+  - matplotlib
+  - scipy
+  - pyyaml
+  - fastapi>=0.68.0
+  - uvicorn>=0.15.0
+  - pydantic>=1.8.0
+  - python-multipart>=0.0.5
+  - pip
+  - pip:
+    - opencv-python
+    - opencv-contrib-python
+    - thop
+    - ninja
+    - tabulate
+    - tensorboard
+    - lap
+    - motmetrics
+    - filterpy
+    - prettytable
+    - easydict
+    - yacs
+    - termcolor
+    - gdown
+    - onnx
+    - onnxruntime-gpu
+    - tensorboardX
+    - seaborn
+    - nvidia-ml-py3
+    - -e ./vendor/BoTSORT
+    - -e ./vendor/rtmlib
+    - -e ./vendor/ResGCNv1

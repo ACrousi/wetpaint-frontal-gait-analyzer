@@ -1,0 +1,191 @@
+# ====================================
+# 定義區 (YAML Anchors)
+# ====================================
+definitions:
+  # 共用 metadata 預設值
+  metadata_defaults: &metadata_defaults
+    use_csv: true
+    deduplicate: false
+    label_column: "age_months"
+
+  # 影片層級 metadata
+  video_metadata: &video_metadata
+    <<: *metadata_defaults
+    metadata_path: "./outputs/2026.csv"
+
+  # 特徵層級 metadata (用於訓練)
+  features_metadata: &features_metadata
+    <<: *metadata_defaults
+    metadata_path: "./outputs/json/analysis_metadata.csv"
+
+  # 導出設定
+  export: &export
+    seg_skeleton:
+      enabled: true
+      use_normalized_keypoints: true
+      segment_type: "fixed_length_cutting"
+      output_dir: "./outputs/json"
+      output_metadata_name: "analysis_metadata.csv"
+      check_existing: true
+    raw_skeleton:
+      enabled: true
+      output_dir: "./outputs/raw_skeleton"
+      check_existing: true
+
+  # 模型配置
+  resgcn: &resgcn
+    config: "resgcn_coco_2"
+
+  xgboost: &xgboost
+    metadata_path: "./outputs/json/analysis_metadata.csv"
+    model_path: "./models/xgboost_model.json"
+    features: [knee_distance_median, knee_distance_mean, knee_distance_max, knee_distance_min, knee_distance_std, knee_distance_cv, ankle_distance_median, ankle_distance_mean, ankle_distance_max, ankle_distance_min, ankle_distance_std, ankle_distance_cv, spine_angle_median, spine_angle_mean, spine_angle_max, spine_angle_min, spine_angle_std, spine_angle_cv, step_times_median, step_times_mean, step_times_max, step_times_min, step_times_std, step_times_cv]
+    max_depth: 6
+    learning_rate: 0.01
+    n_estimators: 500
+    early_stopping_rounds: 5
+    n_splits: 5
+    feature_importance_output_path: "./outputs/feature_importance.png"
+    shap_output_path: "./outputs/shap_summary.png"
+    results_path: "./outputs/training_results.json"
+
+# ====================================
+# 骨架提取模式 (extract_from_videos)
+# ====================================
+skeleton_extraction:
+  export: *export
+  export_segment_type: "fixed_length_cutting"
+  metadata: *video_metadata
+  visualization:
+    enabled: false
+    output_dir: "./outputs/skeleton_videos"
+    segment_type: "fixed_length_cutting"  # 要視覺化的片段類型
+    overwrite: true
+    draw_options:
+      show_interpolated: true
+      line_thickness: 2
+      keypoint_radius: 4
+    video_writer:
+      fps: 30
+      codec: "mp4v"
+  video_processing:
+    # 轉碼設定
+    transcode:
+      enabled: true
+      output_dir: "./outputs/transcoded"
+      delete_after_processing: false  # 處理完成後是否刪除轉碼檔
+      check_existing: true             # 是否檢查已存在的轉碼檔
+      # NVENC 硬體編碼設定 (需要較新的 NVIDIA 驅動程式)
+      use_nvenc: false                 # 是否使用 NVIDIA GPU 硬體編碼
+      # 軟體編碼 (use_nvenc: false) 設定
+      video_codec: "libx264"
+      crf: 18                          # 品質參數 (0-51, 越小品質越高)
+      preset: "fast"
+      # NVENC (use_nvenc: true) 設定
+      cq: 23                           # NVENC 常量質量 (0-51, 越小品質越高)
+      # preset: "p4"                   # NVENC preset: p1(最快)-p7(最好)
+      target_fps: 30
+      target_width: 1080
+      target_height: 1920
+    # 影片方向模式: "portrait"(直向) 或 "landscape"(橫向)
+    # portrait: 當原始影片寬>高時，自動旋轉90度成直向
+    # landscape: 不做任何旋轉，保持原始方向
+    orientation: "portrait"
+    fps: 30
+    # Batch 大小：RTMO 推論時一次處理的幀數
+    # 較大值可提升 GPU 利用率，但需要更多 VRAM
+    batch_size: 32
+    rtmo:
+      weight_path: "./models/rtmo-l/end2end.onnx"
+      input_size: [640, 640]
+    BoTSORT:
+      track_high_thresh: 0.6
+      track_low_thresh: 0.1
+      new_track_thresh: 0.7
+      track_buffer: 15
+      with_reid: False
+      match_thresh: 0.8
+      proximity_thresh: 0.5
+      appearance_thresh: 0.25
+      cmc_method: 'none'
+      name: 'exp'
+      ablation: False
+      mot20: False
+      fast_reid_config: ""
+      fast_reid_weights: ""
+      device: 'cuda'
+  analysis:
+    standing_metric_params:
+      angle_threshold: 120
+    ankle_alternation_metric_params:
+      min_peak_distance: 7
+      peak_prominence: 0.1
+      height: 0.1
+      min_alternating_cycles: 3
+      gap_tolerance: 45
+      smoothing_window: 5
+      left_ankle_idx: 15
+      right_ankle_idx: 16
+      use_normalized: true
+      confidence_threshold: 0.5
+    standing_segment_params:
+      min_len: 10
+      gap_tolerance: 30
+    torso_ratio_segment_params:
+      max_ratio_threshold: 5
+      min_len: 15
+    walking_segment_params:
+      min_alternating_cycles: 3
+      segment_padding: 15
+      min_len: 15
+      gap_tolerance: 45
+    combined_segment_params:
+      criteria:
+        standing: true
+        torso_ratio_valid: true
+        walking: true
+      min_len: 60
+      gap_tolerance: 5
+    fixed_length_cutting_params:
+      target_segment_type: "combined"
+      fixed_length: 128
+      min_len: 128
+      gap_tolerance: 0
+      # step_offset: 90
+    step_time_metric_params:
+      fps: 30
+      segment_type_filter: "fixed_length_cutting"
+    child_identification_params:
+      median_head_ratio_threshold: 4.0
+      median_sitting_index_threshold: 58.0
+    keypoint_score_threshold_params:
+      enabled: true
+      threshold: 0.5
+    preprocess_params:
+      interpolate_max_frames: 30
+      min_track_duration_frames: 90
+    keypoints_normalization_params:
+      image_width: 1920
+      image_height: 1080
+      center_keypoint: "shoulder_center"
+      scale_method: "fixed_torso_length"
+      reference_scale: 2.0
+      enable_smoothing: true
+      gauss_sigma: 0.5
+
+# ====================================
+# 訓練模式 (train)
+# ====================================
+train:
+  metadata: *features_metadata
+  resgcn: *resgcn
+  xgboost: *xgboost
+
+# ====================================
+# 預測模式 (predict)
+# ====================================
+predict:
+  resgcn:
+    <<: *resgcn
+    # 預測時使用的模型權重路徑（對應 --pretrained_path）
+    pretrained_path: "./work_dir/resgcn_coco/resgcn_coco_2_pa-resgcn-b15-r2_coco/2026-01-14 23-12-29/resgcn_coco_2_pa-resgcn-b15-r2_coco.pth.tar"
