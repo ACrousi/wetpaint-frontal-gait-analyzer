@@ -235,3 +235,44 @@ class ResGCNInference:
             bin_centers=processor.bin_centers,
             use_ldl=getattr(processor.args, 'use_ldl', False)
         )
+
+    @classmethod
+    def from_config(cls, args, checkpoint_path=None):
+        """Create inference pipeline directly from configuration args
+        
+        This avoids Initializer/Processor overhead by setting up only
+        components needed for inference.
+        """
+        from .initializer import Initializer
+        from .preprocess.skeleton_converter import SkeletonDataConverter
+        from .dataset.skeleton_transform import SkeletonTransform
+        
+        # Override checkpoint path if provided
+        if checkpoint_path:
+             args.pretrained_path = checkpoint_path
+             
+        # Use Initializer in inference_only mode to setup environment and model
+        initializer = Initializer(args, None, inference_only=True)
+        
+        # Create Converter
+        _, _, max_frame, num_joint, num_person = initializer.data_shape
+        converter = SkeletonDataConverter(
+            num_joint=num_joint,
+            max_frame=max_frame,
+            num_person=num_person
+        )
+        
+        # Create Transform
+        skeleton_transform = SkeletonTransform.from_graph(
+            args.dataset,
+            augmentor=None
+        )
+        
+        return cls(
+            model=initializer.model,
+            device=initializer.device,
+            skeleton_transform=skeleton_transform,
+            converter=converter,
+            bin_centers=initializer.bin_centers,
+            use_ldl=getattr(args, 'use_ldl', False)
+        )

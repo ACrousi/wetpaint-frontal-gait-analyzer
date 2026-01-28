@@ -28,8 +28,21 @@ def main():
 
     elif args.predict:
         # Predict mode: inference on input JSON files
-        p = Processor(args, save_dir)
-        p.predict(args.input_json)
+        # 改為直接使用 inference 模組，避免 Processor 初始化帶來的額外開銷 (如載入訓練數據)
+        from src.inference import ResGCNInference
+        import json
+        
+        # 直接從 args 建立 inference pipeline
+        inference = ResGCNInference.from_config(args)
+        
+        # 執行預測
+        predictions = inference.predict_batch(args.input_json)
+        
+        # 轉換結果並輸出 JSON (供 subprocess 讀取)
+        results = [pred.to_dict() for pred in predictions]
+        print('===PREDICTION_RESULTS_START===')
+        print(json.dumps(results, ensure_ascii=False, indent=2))
+        print('===PREDICTION_RESULTS_END===')
 
     elif args.extract or args.visualization:
         if args.extract:

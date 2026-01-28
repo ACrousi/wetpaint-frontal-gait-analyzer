@@ -10,21 +10,54 @@ from . import scheduler
 
 
 class Initializer():
-    def __init__(self, args, save_dir):
+    def __init__(self, args, save_dir, inference_only=False):
         self.args = args
         self.save_dir = save_dir
+        self.inference_only = inference_only
 
         logging.info('')
         logging.info('Starting preparing ...')
         self.init_environment()
         self.init_device()
-        self.init_dataloader()
+        
+        if self.inference_only:
+            # Inference mode: only load metadata (skip heavy data loading)
+            self.init_metadata()
+            logging.info('Initializer: Inference mode (fast path)')
+        else:
+            # Training mode: full initialization
+            self.init_dataloader()
+            
         self.init_model()
-        self.init_optimizer()
-        self.init_lr_scheduler()
-        self.init_loss_func()
+        
+        if not self.inference_only:
+            self.init_optimizer()
+            self.init_lr_scheduler()
+            self.init_loss_func()
+            
         logging.info('Successful!')
         logging.info('')
+
+    def init_metadata(self):
+        """Initialize dataset metadata without loading data (for inference)"""
+        # Get metadata from dataset module
+        self.data_shape, self.num_class, self.A, self.parts = dataset.get_dataset_info(self.args.dataset)
+        
+        # Determine num_class from config if provided (override default)
+        dataset_name = self.args.dataset.split('-')[0]
+        dataset_args = self.args.dataset_args.get(dataset_name, {})
+        if 'num_class' in dataset_args:
+             self.num_class = dataset_args['num_class']
+
+        # Setup bin_centers for LDL if needed
+        custom_bin_centers = dataset_args.get('custom_bin_centers', None)
+        if custom_bin_centers:
+            self.bin_centers = torch.tensor(custom_bin_centers, dtype=torch.float32)
+        else:
+            self.bin_centers = None
+            
+        logging.info('Data shape: {}'.format(self.data_shape))
+        logging.info('Number of action classes: {}'.format(self.num_class))
 
     def init_environment(self):
         np.random.seed(self.args.seed)
@@ -123,9 +156,19 @@ class Initializer():
         logging.info('Model parameters: {:.2f}M'.format(
             sum(p.numel() for p in self.model.parameters()) / 1000 / 1000
         ))
-        pretrained_model = '{}/{}.pth.tar'.format(self.args.pretrained_path, self.model_name)
+        # Load pretrained weights
+        if os.path.isfile(self.args.pretrained_path):
+             pretrained_model = self.args.pretrained_path
+        else:
+             pretrained_model = '{}/{}.pth.tar'.format(self.args.pretrained_path, self.model_name)
+
         if os.path.exists(pretrained_model):
             checkpoint = torch.load(pretrained_model, map_location=torch.device('cpu'))
+            
+            # Handle DataParallel prefix match if needed (Initializer uses DataParallel so typically matches)
+            # But just in case weights don't have 'module.' prefix or vice versa, standard loading might need care
+            # Usually checkpoint['model'] matches the architecture if trained with same code
+            
             self.model.module.load_state_dict(checkpoint['model'])
             logging.info('Pretrained model: {}'.format(pretrained_model))
         elif self.args.pretrained_path:

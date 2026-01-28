@@ -62,3 +62,18 @@ def create(debug, dataset, path, preprocess=False, **kwargs):
     # Use num_class from kwargs if provided (for regression/distribution tasks)
     num_class = kwargs.get('num_class', __class[dataset])
     return feeders, __shape[feeder_name], num_class, graph.A, graph.parts
+
+
+def get_dataset_info(dataset):
+    """Get dataset metadata without loading data (for inference)"""
+    if dataset not in __class.keys():
+         raise ValueError(f'Error: Do NOT exist this dataset: {dataset}!')
+         
+    graph = Graph(dataset)
+    feeder_name = dataset  # Simplified logic, assume no preprocess for inference usually
+    
+    # Handle feeder name mapping if complex logic is needed (mirroring create())
+    if 'ntu' in dataset and 'preprocess' in dataset:
+         feeder_name = 'ntu-preprocess'
+         
+    return __shape.get(feeder_name), __class.get(dataset), graph.A, graph.parts
