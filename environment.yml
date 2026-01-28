@@ -6,10 +6,10 @@ channels:
   - defaults
 dependencies:
   - python=3.8
-  - pytorch=1.13.1
-  - torchvision=0.14.1
-  - torchaudio=0.13.1
-  - pytorch-cuda=11.7
+  - pytorch=2.4.1
+  - pytorch-cuda=11.8
+  - torchvision
+  - torchaudio
   - numpy
   - tqdm
   - loguru
@@ -45,6 +45,7 @@ dependencies:
     - tensorboardX
     - seaborn
     - nvidia-ml-py3
+    - cython_bbox
     - -e ./vendor/BoTSORT
     - -e ./vendor/rtmlib
     - -e ./vendor/ResGCNv1

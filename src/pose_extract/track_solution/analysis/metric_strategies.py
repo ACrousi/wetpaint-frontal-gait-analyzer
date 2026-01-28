@@ -1,4 +1,3 @@
-from __future__ import annotations
 import numpy as np
 import pandas as pd
 from typing import Dict
@@ -15,7 +14,7 @@ from .analysis_strategies import MetricStrategy
 from .analysis_results import AnalysisResult
 from .base import SegmentType
 
-def _angle(p1, p2, p3) -> float | None:
+def _angle(p1, p2, p3) -> Optional[float]:
     v1, v2 = np.asarray(p1) - np.asarray(p2), np.asarray(p3) - np.asarray(p2)
     n1, n2 = np.linalg.norm(v1), np.linalg.norm(v2)
     if n1 == 0 or n2 == 0:

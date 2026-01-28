@@ -58,18 +58,22 @@ class Initializer():
         if type(self.args.gpus) is int:
             self.args.gpus = [self.args.gpus]
         if len(self.args.gpus) > 0 and torch.cuda.is_available():
-            pynvml.nvmlInit()
-            for i in self.args.gpus:
-                handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-                meminfo = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                memused = meminfo.used / 1024 / 1024
-                logging.info('GPU-{} used: {}MB'.format(i, memused))
-                if memused > 4000:  # 增加記憶體限制到4GB
-                    pynvml.nvmlShutdown()
-                    logging.info('')
-                    logging.error('GPU-{} is occupied!'.format(i))
-                    raise ValueError()
-            pynvml.nvmlShutdown()
+            # Try to use pynvml for GPU memory monitoring (optional, may fail on Windows)
+            try:
+                pynvml.nvmlInit()
+                for i in self.args.gpus:
+                    handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+                    meminfo = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                    memused = meminfo.used / 1024 / 1024
+                    logging.info('GPU-{} used: {}MB'.format(i, memused))
+                    if memused > 4000:  # 增加記憶體限制到4GB
+                        pynvml.nvmlShutdown()
+                        logging.info('')
+                        logging.error('GPU-{} is occupied!'.format(i))
+                        raise ValueError()
+                pynvml.nvmlShutdown()
+            except Exception as e:
+                logging.warning('NVML not available, skipping GPU memory check: {}'.format(type(e).__name__))
             self.output_device = self.args.gpus[0]
             self.device =  torch.device('cuda:{}'.format(self.output_device))
             torch.cuda.set_device(self.output_device)

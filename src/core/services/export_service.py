@@ -5,7 +5,7 @@ import csv
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Union, Literal, Tuple
+from typing import Dict, List, Any, Optional, Union, Literal, Tuple, Set
 from datetime import datetime
 from collections import defaultdict
 
@@ -364,7 +364,7 @@ class ExportService:
             return None
 
     def export_analysis_metadata_csv(self, complete_data_list: List[Dict[str, Any]],
-                                        active_track_ids: set[int], exported_paths: Dict[int, List[str]] = None) -> Optional[str]:
+                                        active_track_ids: Set[int], exported_paths: Dict[int, List[str]] = None) -> Optional[str]:
         """
         將指定軌跡的簡化 metadata 匯出為 CSV 檔案（不含統計特徵）。
 

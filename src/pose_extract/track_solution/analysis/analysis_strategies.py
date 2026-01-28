@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 class AnalysisStrategy(ABC):
     """所有分析策略的統一基類。"""
-    required_metrics: list[str] = []
-    required_segments: list[str] = []
+    required_metrics: List[str] = []
+    required_segments: List[str] = []
 
     @property
     @abstractmethod
@@ -94,10 +94,10 @@ class SegmentStrategy(AnalysisStrategy):
         if not sorted_frames:
             return segments_true, segments_false
 
-        current_segment_start_frame: int | None = None
-        current_segment_is_true: bool | None = None # True if current segment is for True condition, False for False condition
+        current_segment_start_frame: Optional[int] = None
+        current_segment_is_true: Optional[bool] = None # True if current segment is for True condition, False for False condition
         # last_true_frame_in_potential_segment 用於處理 gap_tolerance
-        last_true_frame_in_potential_segment: int | None = None
+        last_true_frame_in_potential_segment: Optional[int] = None
         gap_count = 0
 
         for i, frame_id in enumerate(sorted_frames):

@@ -2,7 +2,7 @@
 from .record import TrackRecord, TrackState # SegmentType 也可能需要，取決於 filter_by_segment_type 這類方法的實現
 import numpy as np
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class TrackRepository:
         self.tracks[track_id].add_detection(frame_id, position, state, score, mean, keypoints, keypoints_score)
         self.max_frame = max(self.max_frame, frame_id)
 
-    def get_track(self, track_id) -> TrackRecord | None:
+    def get_track(self, track_id) -> Optional[TrackRecord]:
         """獲取特定ID的追蹤記錄"""
         return self.tracks.get(track_id)
 
