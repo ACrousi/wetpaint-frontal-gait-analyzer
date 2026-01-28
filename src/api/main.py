@@ -12,15 +12,19 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from src.api.models import VideoProcessRequest, VideoProcessResponse, VideoProcessingError, VideoFileNotFoundError
 from config import ConfigManager
-from src.core.workflow import VideoProcessingWorkflow
-from src.core.prediction_workflow import ResGCNPredictionWorkflow
+from src.core.workflows.prediction_workflow import PredictionWorkflow
 
 # 設置日誌
+log_dir = Path("logs")
+log_dir.mkdir(exist_ok=True)
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+log_file = log_dir / f"api_{timestamp}.log"
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("api.log", encoding='utf-8'),
+        logging.FileHandler(log_file, encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -43,7 +47,7 @@ async def lifespan(app: FastAPI):
         logger.info("配置加載完成")
         
         # 創建影片處理工作流程
-        workflow = ResGCNPredictionWorkflow(config)
+        workflow = PredictionWorkflow(config)
         logger.info("影片處理工作流程初始化完成")
         
         yield
@@ -99,66 +103,28 @@ async def process_video(request: VideoProcessRequest):
             logger.error(f"影片檔案不存在: {request.videopath}")
             raise VideoFileNotFoundError(str(video_path))
         
-        # 構造 video_info 字典
-        video_info = {
-            "video_path": str(video_path),
-            "video_name": video_path.name,
-            "target_fps": 30,  # 默認值或從配置讀取
-            "case_id": request.case_id,
-            "months": request.months
-        }
-        
-        # 執行影片處理
-        logger.info(f"開始處理影片: {request.videopath}")
-        result = workflow.run_prediction(video_info)
+        # 執行骨架提取和預測
+        prediction_result = workflow.predict_from_videos(
+            video_paths=[str(video_path)],
+            case_id=request.case_id,
+            actual_age=float(request.months)
+        )
 
-        if not result.get("success", False):
-            error_msg = result.get("error", "未知錯誤")
-            logger.error(f"影片處理失敗: {error_msg}")
-            raise VideoProcessingError(f"影片處理失敗: {error_msg}")
-
-        # 解析預測結果
-        predictions = result.get("predictions", [])
-        if not predictions:
-            logger.warning("沒有預測結果")
-            raise VideoProcessingError("沒有找到有效的預測結果")
-
-        # 計算整體預測結果（這裡可以根據業務邏輯調整）
-        # 例如：取最高信心度的預測，或計算平均值等
-        if predictions:
-            # 簡單的策略：取第一個預測結果
-            best_prediction = predictions[0]
-            predicted_class = best_prediction.get("predicted_class", 0)
-            confidence = best_prediction.get("confidence", 0.0)
-
-            # 將預測類別轉換為業務標籤（這裡需要根據實際的類別映射調整）
-            label_map = {
-                0: "0-3",
-                1: "3-6",
-                2: "6-9",
-                3: "9-12",
-                4: "12-15",
-                5: "15-18"
-            }
-            label = label_map.get(predicted_class, "unknown")
-
-            # 根據信心度決定結果
-            result_status = "normal" if confidence > 0.5 else "uncertain"
-        else:
-            label = "unknown"
-            confidence = 0.0
-            result_status = "no_prediction"
-
-        # 生成響應
+        # 生成響應 - 使用 PredictionResult 的結構
         response = VideoProcessResponse(
             case_id=request.case_id,
-            label=label,
-            prob=confidence,
-            result=result_status,
+            predicted_age=prediction_result.predicted_age,
+            predicted_class=prediction_result.segment_predictions[0].predicted_class if prediction_result.segment_predictions else 0,
+            confidence=prediction_result.confidence,
+            prob_distribution=prediction_result.prob_distribution,
+            actual_age=prediction_result.actual_age,
+            age_difference=prediction_result.age_difference,
+            development_status=prediction_result.development_status,
+            num_segments=prediction_result.num_segments,
             timestamp=datetime.utcnow().isoformat() + "Z"
         )
         
-        logger.info(f"處理完成 - Case ID: {request.case_id}")
+        logger.info(f"處理完成 - Case ID: {request.case_id}, 預測月齡: {prediction_result.predicted_age:.2f}, 狀態: {prediction_result.development_status}")
         return response
         
     except VideoFileNotFoundError as e:

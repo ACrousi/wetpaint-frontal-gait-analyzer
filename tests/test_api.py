@@ -1,39 +1,53 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""
-測試影片處理 API
-"""
-
 import requests
-import json
+import argparse
 import sys
-from pathlib import Path
+import os
+import json
 
-def test_api():
-    """測試 API 基本功能"""
-    # API 基礎 URL
-    base_url = "http://localhost:8000"
+def main():
+    parser = argparse.ArgumentParser(description="Test Video Processing API")
+    parser.add_argument("--host", default="127.0.0.1", help="API Host")
+    parser.add_argument("--port", default=8000, type=int, help="API Port")
+    parser.add_argument("--video", default="data/raws/in.MOV", help="Path to video file")
+    parser.add_argument("--case_id", default="test_case_001", help="Case ID")
+    parser.add_argument("--months", default=12, type=int, help="Child's age in months")
+
+    args = parser.parse_args()
+
+    url = f"http://{args.host}:{args.port}/process_video"
     
-    # 測試健康檢查端點
-    print("測試健康檢查端點...")
+    # Ensure absolute path
+    video_path = os.path.abspath(args.video)
+    
+    if not os.path.exists(video_path):
+        print(f"Error: Video file not found at {video_path}")
+        # Try relative to project root if running from elsewhere? 
+        # But we assume running from root.
+        sys.exit(1)
+
+    payload = {
+        "case_id": args.case_id,
+        "videopath": video_path,
+        "months": args.months
+    }
+
+    print(f"Sending request to {url}...")
+    print(f"Payload: {json.dumps(payload, indent=2, ensure_ascii=False)}")
+
     try:
-        response = requests.get(f"{base_url}/")
-        if response.status_code == 200:
-            print("✓ 健康檢查通過")
-            print(f"  響應: {response.json()}")
-        else:
-            print(f"✗ 健康檢查失敗，狀態碼: {response.status_code}")
-            return False
+        response = requests.post(url, json=payload)
+        response.raise_for_status()
+        print("\nResponse:")
+        print(json.dumps(response.json(), indent=2, ensure_ascii=False))
+    except ImportError:
+        print("\nError: 'requests' library not found. Please run 'pip install requests' to use this script.")
     except requests.exceptions.ConnectionError:
-        print("✗ 無法連接到 API 服務，請確保服務正在運行")
-        return False
+        print(f"\nError: Could not connect to API at {url}. Is the server running?")
+        print("Run 'python start_api.py' in a separate terminal.")
     except Exception as e:
-        print(f"✗ 健康檢查時發生錯誤: {e}")
-        return False
-    
-    print("\nAPI 測試完成")
-    return True
+        print(f"\nError: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+             print(f"Server response: {e.response.text}")
 
 if __name__ == "__main__":
-    test_api()
+    main()
