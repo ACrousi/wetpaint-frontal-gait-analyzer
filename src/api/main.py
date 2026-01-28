@@ -15,11 +15,16 @@ from config import ConfigManager
 from src.core.workflows.prediction_workflow import PredictionWorkflow
 
 # 設置日誌
+log_dir = Path("log")
+log_dir.mkdir(parents=True, exist_ok=True)
+current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+log_filename = log_dir / f"api_{current_time}.log"
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("api.log", encoding='utf-8'),
+        logging.FileHandler(str(log_filename), encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
