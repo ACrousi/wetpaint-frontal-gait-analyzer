@@ -1,8 +1,0 @@
-/data
-/heatmaps_output
-/work_dir
-/visualization
-__pycache__/
-trash/
-models/
-draw_umap.py
