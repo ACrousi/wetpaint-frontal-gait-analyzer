@@ -1,0 +1,30 @@
+config: fusion_resgcn_coco
+model_type: resgcn-b19-r1
+dataset: coco
+gpus: [0]
+seed: 1
+
+dataset_args:
+  coco:
+    path: ./data
+    use_gait: true  # 啟用融合
+    gait_columns: ['step_length', 'step_width', 'step_time', 'velocity']  # 定義步態特徵
+    train_batch_size: 16
+    eval_batch_size: 16
+    metadata_path: ./outputs/2025.csv
+
+model_args:
+  gait_dim: 4  # 步態參數維度（與 gait_columns 數量一致）
+
+optimizer: SGD
+optimizer_args:
+  SGD:
+    lr: 0.1
+    momentum: 0.9
+    nesterov: true
+    weight_decay: 0.0001
+
+lr_scheduler: cosine
+scheduler_args:
+  cosine:
+    max_epoch: 100
