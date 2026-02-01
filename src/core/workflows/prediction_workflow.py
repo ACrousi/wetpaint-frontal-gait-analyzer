@@ -75,7 +75,6 @@ class PredictionWorkflow:
         logger.info(f"開始預測流程，共 {len(video_paths)} 支影片 (save_json={save_json})")
         
         if skip_extraction:
-            # 使用已存在的 JSON 檔案
             json_paths = []
             for video_path in video_paths:
                 found = self._find_jsons_for_video(video_path)
@@ -173,7 +172,6 @@ class PredictionWorkflow:
                     details={"video_count": len(video_paths)}
                 )
             
-            # 執行預測（在 with 區塊內，臨時檔案仍存在）
             result = self._predict_from_json_paths(json_paths, case_id, actual_age)
             
             logger.info(f"臨時目錄將被自動清理: {tmpdir}")
