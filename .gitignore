@@ -8,6 +8,7 @@ logs/
 
 # Virtual environment
 /venv
+/aaaaa
 CTR-GCN/
 
 # Python cache

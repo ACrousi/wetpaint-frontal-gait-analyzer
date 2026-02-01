@@ -1,13 +1,13 @@
-name: video-processing
+name: video-processing-b
 channels:
   - pytorch
   - nvidia
   - conda-forge
   - defaults
 dependencies:
-  - python=3.8
-  - pytorch=2.4.1
-  - pytorch-cuda=11.8
+  - python=3.12
+  - pytorch
+  - pytorch-cuda=12.4
   - torchvision
   - torchaudio
   - numpy

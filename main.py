@@ -46,6 +46,8 @@ def parse_arguments():
                         help='實際月齡（用於評估預測結果）')
     parser.add_argument('--skip_extraction', action='store_true',
                         help='跳過骨架提取（假設已有 JSON）')
+    parser.add_argument('--save_json', action='store_true',
+                        help='儲存 JSON 檔案（骨架和片段），預設不儲存使用臨時檔案')
 
     return parser.parse_args()
 
@@ -74,10 +76,9 @@ def main():
             if args.model == 'gcn':
                 # 直接呼叫 ResGCNv1/main.py
                 import subprocess
-                import sys
                 
                 resgcn_config = train_config.get("resgcn", {})
-                resgcn_config_path = resgcn_config.get("config", "./vendor/ResGCNv1/configs/resgcn_coco.yaml")
+                resgcn_config_path = resgcn_config.get("config_path", "./config/resgcn_coco_2.yaml")
                 
                 # Step 1: 生成訓練資料
                 logging.info("Step 1: 生成訓練資料...")
@@ -171,7 +172,8 @@ def main():
                     video_paths=valid_videos,
                     case_id=args.case_id,
                     actual_age=args.actual_age,
-                    skip_extraction=args.skip_extraction
+                    skip_extraction=args.skip_extraction,
+                    save_json=args.save_json
                 )
                 
                 # 輸出結果

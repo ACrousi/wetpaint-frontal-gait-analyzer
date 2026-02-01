@@ -228,13 +228,15 @@ class ExportService:
                 continue
 
         return results
-    def export_segments_by_type(self, complete_data_list: List[Dict[str, Any]], video_info: Union[VideoInfo, Dict[str, Any]]) -> Dict[int, List[str]]:
+    def export_segments_by_type(self, complete_data_list: List[Dict[str, Any]], video_info: Union[VideoInfo, Dict[str, Any]], save_metadata: bool = True, output_dir: Optional[str] = None) -> Dict[int, List[str]]:
         """
         根據完整資料結構導出所有 segments 為 SOA JSON 格式
 
         Args:
             complete_data_list: 包含 frames, metadata, features 的完整資料結構列表
             video_info: 影片資訊（支援 VideoInfo 或舊格式 dict）
+            save_metadata: 是否儲存 metadata CSV（預設 True）
+            output_dir: 可選的輸出目錄（用於臨時目錄）
 
         Returns:
             一個字典，鍵為 track_id，值為成功匯出 segment 的路徑列表
@@ -243,7 +245,11 @@ class ExportService:
         if not seg_skeleton_config.get("enabled", True):
             return {}
 
-        seg_skeleton_output_dir = Path(seg_skeleton_config.get("output_dir", "outputs/json"))
+        # 使用傳入的 output_dir 或配置的目錄
+        if output_dir:
+            seg_skeleton_output_dir = Path(output_dir)
+        else:
+            seg_skeleton_output_dir = Path(seg_skeleton_config.get("output_dir", "outputs/json"))
         seg_skeleton_output_dir.mkdir(parents=True, exist_ok=True)
 
         total_segments_exported = 0
@@ -275,8 +281,8 @@ class ExportService:
                 logger.error(f"匯出 segment 時發生錯誤: {e}", exc_info=True)
                 continue
 
-        # 匯出簡化的 metadata CSV（不含統計特徵）
-        if exported_paths:
+        # 匯出簡化的 metadata CSV（不含統計特徵）- 只在 save_metadata=True 時執行
+        if exported_paths and save_metadata:
             exported_track_ids = set(exported_paths.keys())
             self.export_analysis_metadata_csv(complete_data_list, exported_track_ids, exported_paths)
 

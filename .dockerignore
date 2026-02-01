@@ -1,0 +1,69 @@
+# ============================================================
+# Docker Build Ignore File
+# ============================================================
+
+# Git
+.git
+.gitignore
+
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+aaaaa/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Local data and outputs (mount as volumes instead)
+data/
+outputs/
+models/
+
+# Tests
+tests/
+*.test.py
+
+# Temporary files
+trash/
+*.tmp
+*.temp
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+
+# Notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Environment files (use requirements.txt instead)
+environment.yml
+
+# Agent/Tool directories
+.roo/
+.gemini/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Documentation
+README.md
+TODO
+docs/

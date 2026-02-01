@@ -56,7 +56,11 @@ class ModelConfigManager:
     def get_resgcn_config(self, mode: str = 'generate') -> dict:
         """獲取適配後的ResGCN配置"""
         # 載入基礎配置
-        config_path = self.project_root / 'vendor' / 'ResGCNv1' / 'configs' / 'resgcn_coco.yaml'
+        # 載入基礎配置
+        # 優先尋找 config/resgcn_coco_2.yaml
+        config_path = self.project_root / 'config' / 'resgcn_coco_2.yaml'
+        if not config_path.exists():
+            config_path = self.project_root / 'vendor' / 'ResGCNv1' / 'configs' / 'resgcn_coco.yaml'
 
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)

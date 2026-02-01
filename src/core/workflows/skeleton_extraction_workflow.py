@@ -1,7 +1,7 @@
 import logging
 import time
 import numpy as np
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Union, Optional
 from ..services.video_processing_service import VideoProcessingService
 from ..services.analysis_service import AnalysisService
 from src.pose_extract.track_solution.analysis.analysis_results import AnalysisResult
@@ -71,7 +71,8 @@ class SkeletonExtractionWorkflow:
     def extract_analyze_and_export(
         self, 
         video_info: Union[VideoInfo, Dict[str, Any]], 
-        save_results: bool = True
+        save_results: bool = True,
+        temp_output_dir: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         整合的骨架提取、分析和導出工作流程
@@ -79,6 +80,7 @@ class SkeletonExtractionWorkflow:
         Args:
             video_info: 影片資訊（支援 VideoInfo 或舊格式 dict）
             save_results: 是否儲存結果到檔案
+            temp_output_dir: 臨時輸出目錄（用於預測模式）
 
         Returns:
             包含處理結果的字典（向後相容格式）
@@ -95,6 +97,8 @@ class SkeletonExtractionWorkflow:
             config=self.config
         )
         context.metadata['save_results'] = save_results
+        if temp_output_dir:
+            context.metadata['temp_output_dir'] = temp_output_dir
         
         # 執行 Pipeline
         start_time = time.time()
@@ -104,7 +108,13 @@ class SkeletonExtractionWorkflow:
         logger.info(f"整合處理流程完成: {filename} (總耗時: {total_time:.2f} 秒)")
         
         # 轉換為向後相容的結果格式
-        return self._context_to_result(context)
+        result = self._context_to_result(context)
+        
+        # 如果有導出的 JSON 路徑，加入結果
+        if context.metadata.get('exported_json_paths'):
+            result['exported_json_paths'] = context.metadata['exported_json_paths']
+        
+        return result
     
     def _context_to_result(self, context: PipelineContext) -> Dict[str, Any]:
         """將 PipelineContext 轉換為向後相容的結果字典"""

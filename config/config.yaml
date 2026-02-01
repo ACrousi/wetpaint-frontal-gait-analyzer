@@ -1,4 +1,11 @@
 # ====================================
+# 工作目錄配置
+# ====================================
+# 所有輸出路徑的根目錄
+# 環境變數 WETPAINT_WORKSPACE 可覆蓋此設定
+workspace_root: "./outputs"
+
+# ====================================
 # 定義區 (YAML Anchors)
 # ====================================
 definitions:
@@ -11,12 +18,12 @@ definitions:
   # 影片層級 metadata
   video_metadata: &video_metadata
     <<: *metadata_defaults
-    metadata_path: "./outputs/2026.csv"
+    metadata_path: "./2026.csv"
 
   # 特徵層級 metadata (用於訓練)
   features_metadata: &features_metadata
     <<: *metadata_defaults
-    metadata_path: "./outputs/json/analysis_metadata.csv"
+    metadata_path: "./json/analysis_metadata.csv"
 
   # 導出設定
   export: &export
@@ -24,20 +31,20 @@ definitions:
       enabled: true
       use_normalized_keypoints: true
       segment_type: "fixed_length_cutting"
-      output_dir: "./outputs/json"
+      output_dir: "./json"
       output_metadata_name: "analysis_metadata.csv"
       check_existing: true
     raw_skeleton:
       enabled: true
-      output_dir: "./outputs/raw_skeleton"
+      output_dir: "./raw_skeleton"
       check_existing: true
 
   # 模型配置
   resgcn: &resgcn
-    config: "resgcn_coco_2"
+    config_path: "./config/resgcn_coco_2.yaml"
 
   xgboost: &xgboost
-    metadata_path: "./outputs/json/analysis_metadata.csv"
+    metadata_path: "./json/analysis_metadata.csv"
     model_path: "./models/xgboost_model.json"
     features: [knee_distance_median, knee_distance_mean, knee_distance_max, knee_distance_min, knee_distance_std, knee_distance_cv, ankle_distance_median, ankle_distance_mean, ankle_distance_max, ankle_distance_min, ankle_distance_std, ankle_distance_cv, spine_angle_median, spine_angle_mean, spine_angle_max, spine_angle_min, spine_angle_std, spine_angle_cv, step_times_median, step_times_mean, step_times_max, step_times_min, step_times_std, step_times_cv]
     max_depth: 6
@@ -45,9 +52,9 @@ definitions:
     n_estimators: 500
     early_stopping_rounds: 5
     n_splits: 5
-    feature_importance_output_path: "./outputs/feature_importance.png"
-    shap_output_path: "./outputs/shap_summary.png"
-    results_path: "./outputs/training_results.json"
+    feature_importance_output_path: "./feature_importance.png"
+    shap_output_path: "./shap_summary.png"
+    results_path: "./training_results.json"
 
 # ====================================
 # 骨架提取模式 (extract_from_videos)
@@ -58,7 +65,7 @@ skeleton_extraction:
   metadata: *video_metadata
   visualization:
     enabled: false
-    output_dir: "./outputs/skeleton_videos"
+    output_dir: "./skeleton_videos"
     segment_type: "fixed_length_cutting"  # 要視覺化的片段類型
     overwrite: true
     draw_options:
@@ -72,7 +79,7 @@ skeleton_extraction:
     # 轉碼設定
     transcode:
       enabled: true
-      output_dir: "./outputs/transcoded"
+      output_dir: "./transcoded"
       delete_after_processing: false  # 處理完成後是否刪除轉碼檔
       check_existing: true             # 是否檢查已存在的轉碼檔
       # NVENC 硬體編碼設定 (需要較新的 NVIDIA 驅動程式)
@@ -188,4 +195,4 @@ predict:
   resgcn:
     <<: *resgcn
     # 預測時使用的模型權重路徑（對應 --pretrained_path）
-    pretrained_path: "./work_dir/resgcn_coco/resgcn_coco_2_pa-resgcn-b15-r2_coco/2026-01-14 23-12-29/resgcn_coco_2_pa-resgcn-b15-r2_coco.pth.tar"
+    pretrained_path: "./models/resgcn_coco_2_pa-resgcn-b15-r2_coco.pth.tar"

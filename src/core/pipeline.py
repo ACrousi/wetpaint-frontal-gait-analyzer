@@ -322,8 +322,8 @@ class SegmentExportStage(PipelineStage):
         self.config = config
     
     def should_skip(self, context: PipelineContext) -> bool:
-        if not context.metadata.get('save_results', True):
-            return True
+        # Note: 不要在這裡檢查 save_results，因為 segment JSON 是預測必需的
+        # save_results 只控制 metadata CSV 等附加輸出
         if context.analysis_output is None:
             return True
         # 檢查是否有活躍軌跡
@@ -403,8 +403,17 @@ class SegmentExportStage(PipelineStage):
         
         # 導出
         if complete_data_list:
-            exported_paths = self.export_service.export_segments_by_type(complete_data_list, video_info_dict)
+            save_results = context.metadata.get('save_results', True)
+            temp_output_dir = context.metadata.get('temp_output_dir')  # 臨時目錄（用於預測模式）
+            
+            exported_paths = self.export_service.export_segments_by_type(
+                complete_data_list, 
+                video_info_dict, 
+                save_metadata=save_results,
+                output_dir=temp_output_dir
+            )
             context.metadata['exported_segments'] = len(complete_data_list)
+            context.metadata['exported_json_paths'] = exported_paths  # 儲存導出路徑供後續使用
             logger.info(f"成功導出 {len(complete_data_list)} 個 {segment_type} 的 SOA JSON 資料")
         
         return context

@@ -116,20 +116,71 @@ def init_parameters():
 
 
 def update_parameters(parser, args):
-    if os.path.exists('./configs/{}.yaml'.format(args.config)):
-        with open('./configs/{}.yaml'.format(args.config), 'r', encoding='utf-8') as f:
+    # 優先使用給定的完整路徑，若不存在才回退到 ./configs/{}.yaml
+    if os.path.exists(args.config):
+        config_path = args.config
+    else:
+        config_path = './configs/{}.yaml'.format(args.config)
+    
+    if os.path.exists(config_path):
+        with open(config_path, 'r', encoding='utf-8') as f:
             try:
                 yaml_arg = yaml.load(f, Loader=yaml.FullLoader)
             except:
                 yaml_arg = yaml.load(f, Loader=yaml.FullLoader)
+            
+            # 提取 workspace_root（非命令行參數，單獨處理）
+            workspace_root_from_yaml = yaml_arg.pop('workspace_root', None)
+            
             default_arg = vars(args)
             for k in yaml_arg.keys():
                 if k not in default_arg.keys():
                     raise ValueError('Do NOT exist this parameter {}'.format(k))
             parser.set_defaults(**yaml_arg)
     else:
-        raise ValueError('Do NOT exist this file in \'configs\' folder: {}.yaml!'.format(args.config))
-    return parser.parse_args()
+        raise ValueError('Config file not found: {} (also tried ./configs/{}.yaml)'.format(args.config, args.config))
+    
+    args = parser.parse_args()
+    
+    # ====================================
+    # Workspace 路徑解析
+    # ====================================
+    # 優先順序: 環境變數 > yaml config > 預設值
+    workspace_env = os.environ.get('WETPAINT_WORKSPACE')
+    if workspace_env:
+        workspace_root = os.path.abspath(workspace_env)
+    else:
+        # 從 yaml 取得 workspace_root，預設為 "../../outputs"（相對於 configs 目錄）
+        ws_root = workspace_root_from_yaml if workspace_root_from_yaml else '../../outputs'
+        # 以 config 文件位置為基準解析相對路徑
+        config_dir = os.path.dirname(os.path.abspath(config_path))
+        workspace_root = os.path.abspath(os.path.join(config_dir, ws_root))
+    
+    # 確保 workspace 存在
+    os.makedirs(workspace_root, exist_ok=True)
+    
+    # 解析 work_dir（輸出目錄）
+    if args.work_dir and not os.path.isabs(args.work_dir):
+        args.work_dir = os.path.join(workspace_root, args.work_dir)
+    os.makedirs(args.work_dir, exist_ok=True)
+    
+    # 解析 dataset_args 中的路徑
+    if hasattr(args, 'dataset_args') and isinstance(args.dataset_args, dict):
+        for dataset_name, dataset_config in args.dataset_args.items():
+            if isinstance(dataset_config, dict):
+                path_keys = ['input_path', 'path', 'metadata_path', 
+                            'data_path', 'label_path', 
+                            'eval_data_path', 'eval_label_path']
+                for key in path_keys:
+                    if key in dataset_config:
+                        val = dataset_config[key]
+                        # 空字串表示 workspace_root 本身
+                        if val == '':
+                            dataset_config[key] = workspace_root
+                        elif val and not os.path.isabs(val):
+                            dataset_config[key] = os.path.join(workspace_root, val)
+    
+    return args
 
 
 def get_save_dir(args):
@@ -137,7 +188,8 @@ def get_save_dir(args):
         save_dir = '{}/temp'.format(args.work_dir)
     else:
         ct = strftime('%Y-%m-%d %H-%M-%S')
-        save_dir = '{}/{}_{}_{}/{}'.format(args.work_dir, args.config, args.model_type, args.dataset, ct)
+        config_name = os.path.splitext(os.path.basename(args.config))[0]
+        save_dir = '{}/{}_{}_{}/{}'.format(args.work_dir, config_name, args.model_type, args.dataset, ct)
     U.create_folder(save_dir)
     return save_dir
 

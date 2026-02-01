@@ -34,16 +34,16 @@ class ResGCNPredictor:
         Args:
             config: 配置字典，包含：
                 - resgcn:
-                    - config: ResGCN 配置名稱 (如 'resgcn_coco_2')
+                    - config_path: ResGCN 配置檔路徑 (如 './configs/resgcn_coco_2.yaml')
                     - pretrained_path: 模型權重路徑
         """
         self.config = config
         
         # 支援兩種格式: 
-        # 1. predict.resgcn.config (推薦)
-        # 2. predict.config (舊格式相容)
+        # 1. predict.resgcn.config_path (推薦)
+        # 2. predict.config_path (舊格式相容)
         resgcn_config = config.get('resgcn', config)
-        self.resgcn_config_name = resgcn_config.get('config', 'resgcn_coco_2')
+        self.resgcn_config_path = resgcn_config.get('config_path', 'resgcn_coco_2')
         self.pretrained_path = resgcn_config.get('pretrained_path', '')
         
         # ResGCN 路徑
@@ -75,7 +75,7 @@ class ResGCNPredictor:
         # 調用 ResGCNv1/main.py --predict
         cmd = [
             sys.executable, "-u", "main.py",
-            "--config", self.resgcn_config_name,
+            "--config", self.resgcn_config_path,
             "--predict",
             "--input_json"
         ] + [str(p) for p in json_paths]
@@ -95,11 +95,12 @@ class ResGCNPredictor:
         )
         
         if result.returncode != 0:
+            logger.error(f"ResGCN subprocess stderr:\n{result.stderr}")
             raise InferenceError(
                 f"ResGCN 預測失敗",
                 details={
                     "returncode": result.returncode,
-                    "stderr": result.stderr[:500] if result.stderr else None,
+                    "stderr": result.stderr[:2000] if result.stderr else None,
                     "json_count": len(json_paths)
                 }
             )

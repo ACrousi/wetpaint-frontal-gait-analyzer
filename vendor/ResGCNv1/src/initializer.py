@@ -77,12 +77,14 @@ class Initializer():
             self.scalar_writer = None
         elif self.args.evaluate or self.args.extract or getattr(self.args, 'predict', False):
             self.no_progress_bar = self.args.no_progress_bar
-            self.model_name = '{}_{}_{}'.format(self.args.config, self.args.model_type, self.args.dataset)
+            config_name = os.path.splitext(os.path.basename(self.args.config))[0]
+            self.model_name = '{}_{}_{}'.format(config_name, self.args.model_type, self.args.dataset)
             self.scalar_writer = None
             warnings.filterwarnings('ignore')
         else:
             self.no_progress_bar = self.args.no_progress_bar
-            self.model_name = '{}_{}_{}'.format(self.args.config, self.args.model_type, self.args.dataset)
+            config_name = os.path.splitext(os.path.basename(self.args.config))[0]
+            self.model_name = '{}_{}_{}'.format(config_name, self.args.model_type, self.args.dataset)
             self.scalar_writer = SummaryWriter(logdir=self.save_dir)
             warnings.filterwarnings('ignore')
         logging.info('Saving model name: {}'.format(self.model_name))
@@ -163,7 +165,8 @@ class Initializer():
              pretrained_model = '{}/{}.pth.tar'.format(self.args.pretrained_path, self.model_name)
 
         if os.path.exists(pretrained_model):
-            checkpoint = torch.load(pretrained_model, map_location=torch.device('cpu'))
+            # weights_only=False needed for PyTorch 2.6+ (checkpoint contains numpy objects)
+            checkpoint = torch.load(pretrained_model, map_location=torch.device('cpu'), weights_only=False)
             
             # Handle DataParallel prefix match if needed (Initializer uses DataParallel so typically matches)
             # But just in case weights don't have 'module.' prefix or vice versa, standard loading might need care

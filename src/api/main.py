@@ -15,7 +15,7 @@ from config import ConfigManager
 from src.core.workflows.prediction_workflow import PredictionWorkflow
 
 # 設置日誌
-log_dir = Path("log")
+log_dir = Path("logs")
 log_dir.mkdir(parents=True, exist_ok=True)
 current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
 log_filename = log_dir / f"api_{current_time}.log"
@@ -31,13 +31,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 全局變量
-workflow = None
 config = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """應用生命週期管理器"""
-    global workflow, config
+    global config
     try:
         logger.info("正在初始化應用...")
         
@@ -46,9 +45,8 @@ async def lifespan(app: FastAPI):
         config = config_manager.config
         logger.info("配置加載完成")
         
-        # 創建影片處理工作流程
-        workflow = PredictionWorkflow(config)
-        logger.info("影片處理工作流程初始化完成")
+        # 注意：PredictionWorkflow 現在在每次請求時創建，以確保 GPU 記憶體可被釋放
+        logger.info("應用初始化完成（workflow 將在每次請求時創建）")
         
         yield
         
@@ -92,9 +90,11 @@ async def process_video(request: VideoProcessRequest):
     Returns:
         VideoProcessResponse: 處理結果
     """
-    global workflow, config
+    global config
     
     try:
+        # 每次請求創建新的 workflow，確保預測後釋放 GPU 記憶體
+        workflow = PredictionWorkflow(config)
         logger.info(f"收到處理請求 - Case ID: {request.case_id}, Video: {request.videopath}")
         
         # 檢查影片檔案是否存在

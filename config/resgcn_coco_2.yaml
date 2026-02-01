@@ -3,13 +3,13 @@
 # ====================================
 # 所有輸出路徑的根目錄（相對於 ResGCN 目錄）
 # 環境變數 RESGCN_WORKSPACE 可覆蓋此設定
-workspace_root: "../../workspace"
+workspace_root: "../outputs"
 
 config: resgcn_coco
 dataset: coco
 gpus: [0]
 seed: 1
-work_dir: 'work_dir/resgcn_coco'  # 相對於 workspace_root
+work_dir: 'resgcn_work_dir/'  # 相對於 workspace_root
 no_progress_bar: False
 
 dataset_args:

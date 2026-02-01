@@ -30,7 +30,7 @@ class RTMOWrapper:
     def __init__(self, config:ConfigManager, bond_filter_ratio=0.01):
         self._session_active = True
         # config = ConfigManager()
-        weight_path = config.get("weight_path")
+        weight_path = config.get("weight_path", "./models/rtmo-l/end2end.onnx")
         input_size = config.get("input_size")
         backend = 'onnxruntime'
         openpose_skeleton=False
