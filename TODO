@@ -1,3 +1,13 @@
 OK.Inference 會儲存片段json 和修改 metadata.csv 需變成 存在其他地方的json和csv
 2. API 討論後修改 endpoint
 3. 建立Docker Container
+
+onnxruntime-gpu(stable)暫不支援cuda13:cuda路徑問題
+FTC 1080Ti 只到cuda12.4
+Directory doesn't exist: /app/wetpaint-frontal-gait-analyzer/outputs/json'
+片段json 在json_path =true時 路徑要正確 目前是暫存path
+tesla v100 只到 7.0
+pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+改用乾淨的linux
+
+只要有.py指定影片路徑預測 並回傳jsonresult即可

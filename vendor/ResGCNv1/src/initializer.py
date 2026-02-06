@@ -92,6 +92,16 @@ class Initializer():
     def init_device(self):
         if type(self.args.gpus) is int:
             self.args.gpus = [self.args.gpus]
+        
+        # Check if CUDA is actually available
+        if not torch.cuda.is_available():
+            if len(self.args.gpus) > 0:
+                logging.warning(f'CUDA is not available but GPUs {self.args.gpus} were requested. Falling back to CPU.')
+            else:
+                logging.info('CUDA is not available. Using CPU.')
+            
+            self.args.gpus = [] # Clear GPUs to force CPU mode
+        
         if len(self.args.gpus) > 0 and torch.cuda.is_available():
             # Try to use pynvml for GPU memory monitoring (optional, may fail on Windows)
             try:
@@ -151,9 +161,22 @@ class Initializer():
             'parts': [torch.Tensor(part).long() for part in self.parts]
         }
         self.model = model.create(self.args.model_type, **(self.args.model_args), **kwargs).to(self.device)
-        self.model = torch.nn.DataParallel(
-            self.model, device_ids=self.args.gpus, output_device=self.output_device
-        )
+        
+        if self.device.type == 'cpu':
+            class CPUWrapper(torch.nn.Module):
+                def __init__(self, model):
+                    super().__init__()
+                    self.module = model
+                def forward(self, *args, **kwargs):
+                    return self.module(*args, **kwargs)
+            
+            self.model = CPUWrapper(self.model)
+            logging.info('Wrapped model with CPUWrapper for compatibility')
+        else:
+            self.model = torch.nn.DataParallel(
+                self.model, device_ids=self.args.gpus, output_device=self.output_device
+            )
+            
         logging.info('Model: {} {}'.format(self.args.model_type, self.args.model_args))
         logging.info('Model parameters: {:.2f}M'.format(
             sum(p.numel() for p in self.model.parameters()) / 1000 / 1000

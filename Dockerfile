@@ -1,10 +1,10 @@
 # ============================================================
 # WetPaint Motor Development - Dockerfile
-# Base: NGC Optimized PyTorch 24.05
-# Includes: PyTorch 2.4, CUDA 12.4, cuDNN 9, Python 3.10
+# Base: Python 3.10 (Clean System)
+# Includes: PyTorch 2.6.0, CUDA 12.4 support
 # ============================================================
 
-FROM nvcr.io/nvidia/pytorch-24.11-py3
+FROM python:3.10-slim
 
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
@@ -13,50 +13,56 @@ ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 
 # ============================================================
-# Install system dependencies (FFmpeg and OpenCV requirements)
+# Install system dependencies
 # ============================================================
+# build-essential: for compiling python extensions (e.g. cython_bbox)
+# git: for git-based dependencies
+# ffmpeg, libgl1...: for OpenCV and media processing
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
     ffmpeg \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
+    libgl1 \
+    libglib2.0-0t64 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# Copy vendor packages first (for better Docker layer caching)
+# Install PyTorch (User Requested)
+# ============================================================
+RUN pip install --no-cache-dir \
+    torch==2.6.0 \
+    torchvision==0.21.0 \
+    torchaudio==2.6.0 \
+    --index-url https://download.pytorch.org/whl/cu124
+
+# ============================================================
+# Copy vendor packages (Required for requirements.txt)
 # ============================================================
 COPY vendor/ /app/vendor/
 
 # ============================================================
 # Install Python dependencies
 # ============================================================
-# Create constraints file to prevent overwriting NGC's PyTorch
-RUN pip freeze | grep -E "^torch" > /tmp/constraints.txt || true
-
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -c /tmp/constraints.txt -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # ============================================================
-# Sanity check - verify PyTorch and CUDA are working correctly
+# Sanity check
 # ============================================================
 RUN python -c "\
 import torch; \
 print(f'PyTorch version: {torch.__version__}'); \
 print(f'CUDA available: {torch.cuda.is_available()}'); \
-print(f'CUDA version: {torch.version.cuda}'); \
-assert torch.cuda.is_available(), 'CUDA not available!'; \
-print('✅ PyTorch + CUDA sanity check passed!')"
+if torch.cuda.is_available(): print(f'CUDA version: {torch.version.cuda}');"
 
 # ============================================================
 # Copy application source code
 # ============================================================
-COPY src/ /app/src/
-COPY config/ /app/config/
-COPY main.py /app/
-COPY start_api.py /app/
+# COPY src/ /app/src/
+# COPY config/ /app/config/
+# COPY main.py /app/
+# COPY start_api.py /app/
 
 # Create necessary directories
 RUN mkdir -p /app/data /app/outputs /app/logs /app/models
@@ -66,6 +72,7 @@ RUN mkdir -p /app/data /app/outputs /app/logs /app/models
 # ============================================================
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONNOUSERSITE=1
 
 # ============================================================
 # Expose API port

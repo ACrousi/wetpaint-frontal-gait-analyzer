@@ -118,11 +118,24 @@ class BaseTool(metaclass=ABCMeta):
             outNames = self.session.getUnconnectedOutLayersNames()
             self.session.setInput(input)
             outputs = self.session.forward(outNames)
-        elif self.backend == 'onnxruntime':
-            sess_input = {self.session.get_inputs()[0].name: input}
-            sess_output = []
-            for out in self.session.get_outputs():
-                sess_output.append(out.name)
+        elif backend == 'onnxruntime':
+            import onnxruntime as ort
+            
+            # Configure session options to avoid thread affinity errors
+            sess_options = ort.SessionOptions()
+            sess_options.intra_op_num_threads = 4  # Set explicit thread count
+            sess_options.inter_op_num_threads = 4
+            
+            # Get providers, falling back to CPU if CUDA isn't available
+            providers = RTMLIB_SETTINGS[backend][device]
+            available_providers = ort.get_available_providers()
+            if providers not in available_providers:
+                print(f'{providers} not available, falling back to CPUExecutionProvider')
+                providers = 'CPUExecutionProvider'
+
+            self.session = ort.InferenceSession(path_or_bytes=onnx_model,
+                                                providers=[providers],
+                                                sess_options=sess_options)
 
             outputs = self.session.run(sess_output, sess_input)
         elif self.backend == 'openvino':
