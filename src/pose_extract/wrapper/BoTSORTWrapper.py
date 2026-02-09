@@ -1,4 +1,4 @@
-from config.config import ConfigManager
+from src.core.config import ConfigManager
 from vendor.BoTSORT.tracker.bot_sort import BoTSORT
 
 # class BoTSORTArgs:

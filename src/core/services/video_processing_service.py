@@ -54,14 +54,13 @@ class VideoProcessingService:
         
         video_path = video_info_obj.video_path
         filename = video_info_obj.video_name
-        logger.info(f"開始提取骨架: {filename}")
 
         # 初始化Tracker
         self.tracker = BoTSORTWrapper(self.config.get("BoTSORT", {}))
         track_manager = TrackManager()
 
         # 執行追蹤
-        logger.info(f"開始執行即時追蹤: {filename}")
+        logger.info(f"開始執行骨架提取追蹤: {filename}")
         try:
             self._run_tracking_on_video(track_manager, video_info_dict)
         except (VideoReadError, TrackingError):

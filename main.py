@@ -9,15 +9,13 @@ from collections import defaultdict
 # sys.path.append(os.path.join(os.path.dirname(__file__), '/src'))
 
 # 導入配置和日志模組
-from config.config import ConfigManager
+from src.core.config import ConfigManager
 from src.utils.logger_config import setup_logging
 from src.utils.metadataManager import MetadataManager
 
-# 導入新的工廠和例外
-from src.core.factory import create_workflow_from_yaml
+# 導入例外類
 from src.exceptions import (
     ConfigLoadError, 
-    ConfigValidationError,
     SubprocessError,
     DataGenerationError,
     PredictionError,
@@ -25,6 +23,7 @@ from src.exceptions import (
     MetadataError,
     VideoNotFoundError,
     ArgumentError,
+    ConfigValidationError,
 )
 
 # 實現metadata紀錄資料 多筆影片預測訓練
@@ -164,8 +163,8 @@ def main():
             
             logging.info(f"啟動預測模式，共 {len(valid_videos)} 支影片")
             
-            # 建立預測工作流程
-            prediction_workflow = PredictionWorkflow(config)
+            # 建立預測工作流程 - 傳遞 workspace_root
+            prediction_workflow = PredictionWorkflow(config, workspace_root=config_manager.workspace_root)
             
             try:
                 result = prediction_workflow.predict_from_videos(
@@ -214,18 +213,14 @@ def main():
                 )
             logging.info(f"找到 {len(metadata_manager.df)} 筆影片記錄待處理")
 
-            # 影片處理模式 - 使用工廠建立 Workflow（自動驗證配置）
+            # 影片處理模式 - 直接建立 Workflow
             logging.info("啟動影片處理模式")
             
-            try:
-                workflow = create_workflow_from_yaml(config_path, "skeleton_extraction")
-                logging.info("配置驗證成功")
-            except ConfigValidationError as e:
-                logging.error(f"配置驗證失敗: {e}")
-                return
-            except ConfigLoadError as e:
-                logging.error(f"配置載入失敗: {e}")
-                return
+            from src.core.workflows.skeleton_extraction_workflow import SkeletonExtractionWorkflow
+            workflow = SkeletonExtractionWorkflow(
+                skeleton_extraction_config, 
+                workspace_root=config_manager.workspace_root
+            )
 
             # 處理所有影片
             total_videos = len(metadata_manager.df)

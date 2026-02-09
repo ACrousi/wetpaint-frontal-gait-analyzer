@@ -31,12 +31,9 @@ definitions:
       enabled: true
       use_normalized_keypoints: true
       segment_type: "fixed_length_cutting"
-      output_dir: "./json"
-      output_metadata_name: "analysis_metadata.csv"
       check_existing: true
     raw_skeleton:
       enabled: true
-      output_dir: "./raw_skeleton"
       check_existing: true
 
   # 模型配置
@@ -65,7 +62,6 @@ skeleton_extraction:
   metadata: *video_metadata
   visualization:
     enabled: false
-    output_dir: "./skeleton_videos"
     segment_type: "fixed_length_cutting"  # 要視覺化的片段類型
     overwrite: true
     draw_options:
@@ -79,7 +75,6 @@ skeleton_extraction:
     # 轉碼設定
     transcode:
       enabled: true
-      output_dir: "./transcoded"
       delete_after_processing: false  # 處理完成後是否刪除轉碼檔
       check_existing: true             # 是否檢查已存在的轉碼檔
       # NVENC 硬體編碼設定 (需要較新的 NVIDIA 驅動程式)

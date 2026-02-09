@@ -22,13 +22,15 @@ class SkeletonVisualizationService:
     2.根據 AnalysisResult 中的分段資訊，裁切並繪製對應片段
     3. 輸出影片檔案
     """
+    
+    # 硬編碼的子目錄名稱（基於 workspace_root）
+    SKELETON_VIDEOS_DIR = "skeleton_videos"
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], workspace_root: Optional[Path] = None):
         """
         Args:
             config: 視覺化配置，例如:
                 {
-                    "output_dir": "outputs/visualizations",
                     "draw_options": {
                         "show_interpolated": True,
                         "normalized": False,
@@ -40,9 +42,14 @@ class SkeletonVisualizationService:
                          "codec": "mp4v"
                     }
                 }
+            workspace_root: 工作目錄根路徑（可選）
         """
         self.config = config
-        self.output_base_dir = Path(config.get("output_dir", "../outputs/visualizations"))
+        self._workspace_root = Path(workspace_root) if workspace_root else None
+        # 必須使用 workspace_root 推算路徑
+        if not self._workspace_root:
+            raise ValueError("SkeletonVisualizationService 需要 workspace_root 參數才能決定輸出路徑")
+        self.output_base_dir = self._workspace_root / self.SKELETON_VIDEOS_DIR
         self.visualizer = TrackVisualizer() # 這裡初始化底層繪圖器
 
     def visualize_analysis_segments(

@@ -30,20 +30,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 # 全局變量
 config = None
+workspace_root = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """應用生命週期管理器"""
-    global config
+    global config, workspace_root
     try:
         logger.info("正在初始化應用...")
         
         # 初始化配置管理器
         config_manager = ConfigManager("./config/config.yaml")
         config = config_manager.config
-        logger.info("配置加載完成")
+        workspace_root = config_manager.workspace_root
+        logger.info(f"配置加載完成 (workspace: {workspace_root})")
         
         # 注意：PredictionWorkflow 現在在每次請求時創建，以確保 GPU 記憶體可被釋放
         logger.info("應用初始化完成（workflow 將在每次請求時創建）")
@@ -90,11 +93,11 @@ async def process_video(request: VideoProcessRequest):
     Returns:
         VideoProcessResponse: 處理結果
     """
-    global config
+    global config, workspace_root
     
     try:
         # 每次請求創建新的 workflow，確保預測後釋放 GPU 記憶體
-        workflow = PredictionWorkflow(config)
+        workflow = PredictionWorkflow(config, workspace_root=workspace_root)
         logger.info(f"收到處理請求 - Case ID: {request.case_id}, Video: {request.videopath}")
         
         # 檢查影片檔案是否存在

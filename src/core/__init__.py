@@ -15,7 +15,6 @@ Core 模組
 # 從子模組匯出主要類別
 from .config import (
     load_config,
-    ConfigManager,
     SkeletonExtractionConfig,
 )
 
@@ -45,12 +44,12 @@ from .models import (
     ensure_video_info,
 )
 
-from .factory import (
-    ServiceFactory,
-    WorkflowFactory,
-    create_workflow,
-    create_workflow_from_yaml,
-)
+# from .factory import (
+#     ServiceFactory,
+#     WorkflowFactory,
+#     create_workflow,
+#     create_workflow_from_yaml,
+# )
 
 from .pipeline import (
     PipelineContext,
@@ -70,7 +69,6 @@ from src.exceptions import (
 __all__ = [
     # 配置
     'load_config',
-    'ConfigManager',
     'SkeletonExtractionConfig',
     # 服務
     'AnalysisService',
@@ -89,11 +87,11 @@ __all__ = [
     'WorkflowResult',
     'VideoProcessingResult',
     'ensure_video_info',
-    # 工廠
-    'ServiceFactory',
-    'WorkflowFactory',
-    'create_workflow',
-    'create_workflow_from_yaml',
+    # # 工廠
+    # 'ServiceFactory',
+    # 'WorkflowFactory',
+    # 'create_workflow',
+    # 'create_workflow_from_yaml',
     # Pipeline
     'PipelineContext',
     'PipelineStage',

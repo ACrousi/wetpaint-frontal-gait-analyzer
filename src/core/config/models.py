@@ -60,7 +60,7 @@ class BoTSORTConfig(BaseModel):
 class TranscodeConfig(BaseModel):
     """影片轉碼配置"""
     enabled: bool = True
-    output_dir: str = "./outputs/transcoded"
+    # output_dir 已移除，由 workspace_root 推算
     delete_after_processing: bool = False
     check_existing: bool = True
     use_nvenc: bool = False
@@ -174,7 +174,7 @@ class SegSkeletonConfig(BaseModel):
     enabled: bool = True
     use_normalized_keypoints: bool = True
     segment_type: str = "fixed_length_cutting"
-    output_dir: str = "./outputs/json"
+    # output_dir 已移除，由 workspace_root 推算
     output_metadata_name: str = "analysis_metadata.csv"
     check_existing: bool = True
 
@@ -182,7 +182,7 @@ class SegSkeletonConfig(BaseModel):
 class RawSkeletonConfig(BaseModel):
     """原始骨架導出配置"""
     enabled: bool = True
-    output_dir: str = "./outputs/raw_skeleton"
+    # output_dir 已移除，由 workspace_root 推算
     check_existing: bool = True
 
 
@@ -214,7 +214,7 @@ class VideoWriterConfig(BaseModel):
 class VisualizationConfig(BaseModel):
     """視覺化服務配置"""
     enabled: bool = False
-    output_dir: str = "./outputs/skeleton_videos"
+    # output_dir 已移除，由 workspace_root 推算
     segment_type: Optional[str] = None
     overwrite: bool = True
     draw_options: DrawOptions = Field(default_factory=DrawOptions)

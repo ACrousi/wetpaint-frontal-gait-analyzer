@@ -29,8 +29,14 @@ class ExportService:
     3. 其他自定義格式
     """
     
-    def __init__(self, config: Dict[str, Any]):
+    # 硬編碼的子目錄名稱（基於 workspace_root）
+    RAW_SKELETON_DIR = "raw_skeleton"
+    SEG_SKELETON_DIR = "json"
+    METADATA_FILENAME = "analysis_metadata.csv"
+    
+    def __init__(self, config: Dict[str, Any], workspace_root: Optional[Path] = None):
         self.config = config
+        self._workspace_root = Path(workspace_root) if workspace_root else None
         
     def export_to_raw_skeleton(self, track_manager: TrackManager, video_info: Union[VideoInfo, Dict[str, Any]]) -> str:
         """將 TrackManager 的資料轉換為原始骨架格式並儲存"""
@@ -60,7 +66,10 @@ class ExportService:
 
         # 儲存檔案
         raw_skeleton_config = self.config.get("raw_skeleton", {})
-        output_dir = Path(raw_skeleton_config.get("output_dir", "outputs/raw_skeleton"))
+        # 必須使用 workspace_root 推算路徑
+        if not self._workspace_root:
+            raise ValueError("ExportService 需要 workspace_root 參數才能決定輸出路徑")
+        output_dir = self._workspace_root / self.RAW_SKELETON_DIR
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / f"{Path(video_filename).stem}.json"
         
@@ -245,11 +254,13 @@ class ExportService:
         if not seg_skeleton_config.get("enabled", True):
             return {}
 
-        # 使用傳入的 output_dir 或配置的目錄
+        # 使用傳入的 output_dir 或基於 workspace_root 推算
         if output_dir:
             seg_skeleton_output_dir = Path(output_dir)
+        elif self._workspace_root:
+            seg_skeleton_output_dir = self._workspace_root / self.SEG_SKELETON_DIR
         else:
-            seg_skeleton_output_dir = Path(seg_skeleton_config.get("output_dir", "outputs/json"))
+            raise ValueError("ExportService 需要 workspace_root 參數才能決定輸出路徑")
         seg_skeleton_output_dir.mkdir(parents=True, exist_ok=True)
 
         total_segments_exported = 0
@@ -390,11 +401,13 @@ class ExportService:
         if not seg_skeleton_config.get("enabled", True):
             return None
 
-        seg_skeleton_output_dir = Path(seg_skeleton_config.get("output_dir", "outputs/json"))
-        seg_skeleton_output_dir.parent.mkdir(parents=True, exist_ok=True)
+        # 必須使用 workspace_root 推算路徑
+        if not self._workspace_root:
+            raise ValueError("ExportService 需要 workspace_root 參數才能決定輸出路徑")
+        seg_skeleton_output_dir = self._workspace_root / self.SEG_SKELETON_DIR
+        seg_skeleton_output_dir.mkdir(parents=True, exist_ok=True)
 
-        seg_skeleton_output_metadata_name = seg_skeleton_config.get("output_metadata_name", "analysis_metadata.csv")
-        output_path = seg_skeleton_output_dir / seg_skeleton_output_metadata_name
+        output_path = seg_skeleton_output_dir / self.METADATA_FILENAME
 
         # 建立 track_id 到 metadata 的映射
         metadata_by_track_segment = {}

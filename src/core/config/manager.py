@@ -209,3 +209,46 @@ class ConfigManager:
             else:
                 return default
         return value
+
+    def get_mode_config(self, mode: str) -> Dict[str, Any]:
+        """
+        取得特定模式的配置（已解析路徑）
+        
+        Args:
+            mode: 配置模式，例如 "skeleton_extraction"
+            
+        Returns:
+            該模式的配置字典（路徑已轉為絕對路徑）
+        """
+        return self.config.get(mode, {})
+
+    def get_validated_config(self, mode: str):
+        """
+        取得 Pydantic 驗證後的配置物件
+        
+        Args:
+            mode: 配置模式，例如 "skeleton_extraction"
+            
+        Returns:
+            驗證後的 Pydantic 配置物件
+            
+        Raises:
+            ConfigValidationError: 驗證失敗
+        """
+        from src.core.config.models import SkeletonExtractionConfig
+        from src.exceptions import ConfigValidationError
+        
+        mode_config = self._raw_config.get(mode)
+        if mode_config is None:
+            raise ConfigLoadError(
+                f"配置中找不到模式: {mode}",
+                details={"available_modes": list(self._raw_config.keys())}
+            )
+        
+        try:
+            return SkeletonExtractionConfig.model_validate(mode_config)
+        except Exception as e:
+            raise ConfigValidationError(
+                f"配置驗證失敗: {e}",
+                details={"mode": mode}
+            )

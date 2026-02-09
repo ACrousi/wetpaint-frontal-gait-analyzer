@@ -6,7 +6,7 @@ import numpy as np
 
 # from rtmlib import Body, draw_skeleton
 from vendor.rtmlib.rtmlib import RTMO
-from config.config import ConfigManager
+from src.core.config import ConfigManager
 
 class RTMOWrapper:
     RTMO_MODE = {

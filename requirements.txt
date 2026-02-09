@@ -1,7 +1,6 @@
 # ============================================================
 # WetPaint Motor Development - Requirements
-# For use with NGC PyTorch image (nvcr.io/nvidia/pytorch:24.05-py3)
-# PyTorch, CUDA, cuDNN, numpy, scipy are already included in NGC image
+# PyTorch, CUDA, cuDNN, numpy, scipy are already image
 # ============================================================
 
 # ----------------------------------------------------------
@@ -13,16 +12,16 @@ scikit-image
 scikit-learn
 pillow
 h5py
-matplotlib>=3.3.0
+matplotlib
 pyyaml
 
 # ----------------------------------------------------------
 # API Server
 # ----------------------------------------------------------
-fastapi>=0.68.0
-uvicorn>=0.15.0
-pydantic>=1.8.0
-python-multipart>=0.0.5
+fastapi
+uvicorn
+pydantic
+python-multipart
 
 # ----------------------------------------------------------
 # Computer Vision & Video Processing
@@ -57,12 +56,12 @@ easydict
 yacs
 termcolor
 gdown
-seaborn>=0.11.0
+seaborn
 nvidia-ml-py3
 
 # ----------------------------------------------------------
 # Vendor packages (editable installs)
 # ----------------------------------------------------------
--e ./vendor/BoTSORT
--e ./vendor/rtmlib
--e ./vendor/ResGCNv1
+# -e ./vendor/BoTSORT
+# -e ./vendor/rtmlib
+# -e ./vendor/ResGCNv1

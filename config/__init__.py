@@ -1,1 +1,1 @@
-from .config import ConfigManager
+from src.core.config.manager import ConfigManager

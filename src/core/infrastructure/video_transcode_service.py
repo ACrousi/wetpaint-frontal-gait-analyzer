@@ -26,7 +26,10 @@ class VideoTranscodeService:
     3. 統一輸出尺寸和幀率
     """
     
-    def __init__(self, config: Dict[str, Any]):
+    # 硬編碼的子目錄名稱（基於 workspace_root）
+    TRANSCODED_DIR = "transcoded"
+    
+    def __init__(self, config: Dict[str, Any], workspace_root: Optional[Path] = None):
         """
         初始化轉碼服務
         
@@ -34,7 +37,6 @@ class VideoTranscodeService:
             config: 轉碼配置，例如:
                 {
                     "enabled": True,
-                    "output_dir": "./outputs/transcoded",
                     "delete_after_processing": False,
                     "check_existing": True,
                     "video_codec": "libx264",
@@ -44,10 +46,15 @@ class VideoTranscodeService:
                     "target_width": 1080,
                     "target_height": 1920
                 }
+            workspace_root: 工作目錄根路徑（可選）
         """
         self.config = config
+        self._workspace_root = Path(workspace_root) if workspace_root else None
         self.enabled = config.get("enabled", True)
-        self.output_dir = Path(config.get("output_dir", "./outputs/transcoded"))
+        # 必須使用 workspace_root 推算路徑
+        if not self._workspace_root:
+            raise ValueError("VideoTranscodeService 需要 workspace_root 參數才能決定輸出路徑")
+        self.output_dir = self._workspace_root / self.TRANSCODED_DIR
         self.delete_after_processing = config.get("delete_after_processing", False)
         self.check_existing = config.get("check_existing", True)
         

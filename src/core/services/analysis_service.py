@@ -80,58 +80,61 @@ class AnalysisService:
         根據設定檔，建立一個包含所有 Metric 和 Segment 策略的**單一**管線。
         策略的順序至關重要，依賴項必須在前。
         """
-        logger.info("建立統一的 Per-Track 分析管線...")
+        logger.debug(f"---------Metric Strategies---------")
         strategies: List[AnalysisStrategy] = []
 
         # --- Metric Strategies ---
         strategies.append(BodyProportionMetric())
-        logger.info("添加身體比例指標")
+        logger.debug("添加身體比例指標")
 
         strategies.append(StandingMetric(**self.config.get("standing_metric_params", {})))
-        logger.info("添加站立指標")
+        logger.debug("添加站立指標")
 
         strategies.append(TorsoProportionMetric())
-        logger.info("添加軀幹比例指標")
+        logger.debug("添加軀幹比例指標")
 
         strategies.append(LegDistanceMetric())
-        logger.info("添加腿部距離指標")
+        logger.debug("添加腿部距離指標")
 
         strategies.append(SpineAngleMetric())
-        logger.info("添加脊椎角度指標")
+        logger.debug("添加脊椎角度指標")
 
         strategies.append(HipCenterMetric())
-        logger.info("添加髖關節中心點指標")
+        logger.debug("添加髖關節中心點指標")
 
         strategies.append(AnkleAlternationMetric(**self.config.get("ankle_alternation_metric_params", {})))
-        logger.info("添加腳踝交替指標")
+        logger.debug("添加腳踝交替指標")
 
         # --- Segment Strategies (依賴上面的 Metric) ---
+        logger.debug(f"---------Segment Strategies---------")
         if self.config.get("standing_segment_params", {}).get("enabled", True):
             strategies.append(StandingSegment(**self.config.get("standing_segment_params", {})))
-            logger.info("添加站立分段策略")
+            logger.debug("添加站立分段策略")
 
         if self.config.get("torso_ratio_segment_params", {}).get("enabled", True):
             strategies.append(TorsoRatioSegment(**self.config.get("torso_ratio_segment_params", {})))
-            logger.info("添加軀幹比例分段策略")
+            logger.debug("添加軀幹比例分段策略")
 
         if self.config.get("walking_segment_params", {}).get("enabled", True):
             strategies.append(WalkingDetectionByAnkleAlternationStrategy(**self.config.get("walking_segment_params", {})))
-            logger.info("添加走路分段策略")
+            logger.debug("添加走路分段策略")
 
         # --- Combined & Cutting Strategies (依賴上面的 Segment) ---
+        logger.debug(f"---------Combined & Cutting Strategies---------")
         if self.config.get("combined_segment_params", {}).get("enabled", True):
             strategies.append(CombinedAnalysisStrategy(**self.config.get("combined_segment_params", {})))
-            logger.info("添加組合分段策略")
+            logger.debug("添加組合分段策略")
         
         if self.config.get("fixed_length_cutting_params", {}).get("enabled", True):
             strategies.append(FixedLengthCuttingStrategy(**self.config.get("fixed_length_cutting_params", {})))
-            logger.info("添加固定長度切割策略")
+            logger.debug("添加固定長度切割策略")
 
         if self.config.get("step_time_metric_params", {}).get("enabled", True):
             strategies.append(StepTimeMetric(**self.config.get("step_time_metric_params", {})))
-            logger.info("添加步伐時間指標")
+            logger.debug("添加步伐時間指標")
 
         # --- 添加中位數計算策略 (用於目標識別) ---
+        logger.debug(f"---------Median Strategies---------")
         child_params = self.config.get("child_identification_params", {})
         if child_params.get("enabled", True):
             # 計算身體比例指標的中位數
@@ -141,15 +144,15 @@ class AnalysisService:
                 segment_type_filter=SegmentType.STANDING  # 只在站立分段中計算中位數
             )
             strategies.append(median_strategy)
-            logger.info("添加身體比例中位數計算策略")
+            logger.debug("添加身體比例中位數計算策略")
 
         summary_strategy = SegmentSummaryMetricStrategy(
             segment_type_filter=SegmentType.FIXED_LENGTH_CUTTING
         )
         strategies.append(summary_strategy)
-        logger.info("添加分段統計摘要策略")
+        logger.debug("添加分段統計摘要策略")
 
-        logger.info(f"管線建立完成，共包含 {len(strategies)} 個 Per-Track 策略。")
+        logger.debug(f"管線建立完成，共包含 {len(strategies)} 個 Per-Track 策略。")
         return AnalysisPipeline(strategies)
 
     def _run_per_track_analysis(self, track_manager: TrackManager, all_results: Dict[int, AnalysisResult]):
@@ -172,11 +175,9 @@ class AnalysisService:
         ]
 
         for track in tracks_to_analyze:
-            logger.debug(f"分析軌跡 {track.track_id}...")
             try:
                 analysis_result = self.per_track_pipeline.run(track)
                 all_results[track.track_id] = analysis_result
-                logger.debug(f"軌跡 {track.track_id} 分析完成")
             except Exception as e:
                 logger.error(f"分析軌跡 {track.track_id} 時發生錯誤: {e}")
                 # 創建一個空的 AnalysisResult 以保持一致性
@@ -212,7 +213,6 @@ class AnalysisService:
         # 應用決策
         if result.removed_track_ids:
             removed_count = track_manager.mark_tracks_removed(result.removed_track_ids)
-            logger.info(f"【階段二】應用決策：標記 {removed_count} 個軌跡為 REMOVED。")
 
         logger.info(f"【階段二】目標識別完成。保留: {result.kept_track_ids} 軌跡，移除: {result.removed_track_ids} 軌跡")
         
@@ -227,24 +227,24 @@ class AnalysisService:
         keypoint_threshold_params = self.config.get("keypoint_score_threshold_params", {})
         if keypoint_threshold_params.get("enabled", True):
             threshold_value = keypoint_threshold_params.get("threshold", 0.5)
-            logger.info(f"添加關鍵點分數閾值過濾預處理器: {threshold_value}")
+            logger.debug(f"添加關鍵點分數閾值過濾預處理器: {threshold_value}")
             preprocessors.append(KeypointScoreThresholdPreprocessor(threshold=threshold_value))
 
         # 插值處理
         preprocess_params = self.config.get("preprocess_params", {})
         interpolate_max_frames = preprocess_params.get("interpolate_max_frames", 30)
-        logger.info(f"添加軌跡插值預處理器: max_frames={interpolate_max_frames}")
+        logger.debug(f"添加軌跡插值預處理器: max_frames={interpolate_max_frames}")
         preprocessors.append(InterpolateTracksPreprocessor(max_frames=interpolate_max_frames))
 
         # 移除短軌跡
         min_duration_frames = preprocess_params.get("min_track_duration_frames", 90)
-        logger.info(f"添加移除短軌跡預處理器: min_duration={min_duration_frames}")
+        logger.debug(f"添加移除短軌跡預處理器: min_duration={min_duration_frames}")
         preprocessors.append(RemoveShortTracksPreprocessor(min_duration_frames=min_duration_frames))
 
         # 關鍵點正規化
         normalization_params = self.config.get("keypoints_normalization_params", {})
         if normalization_params.get("enabled", True):
-            logger.info("添加關鍵點正規化預處理器")
+            logger.debug("添加關鍵點正規化預處理器")
             preprocessors.append(KeypointsNormalizationPreprocessor(**normalization_params))
 
         # 執行預處理管道
@@ -254,51 +254,51 @@ class AnalysisService:
 
             # 記錄預處理結果
             self.preprocessing_stats = stats
-            logger.info("預處理管道執行完成")
+            logger.debug("預處理管道執行完成")
         else:
-            logger.info("沒有啟用的預處理器")
+            logger.debug("沒有啟用的預處理器")
     
-    def _execute_analysis_pipeline(self, track_manager: TrackManager,
-                                 strategies: List[AnalysisStrategy],
-                                 track_id: Optional[int] = None) -> Dict[int, Dict[str, Any]]:
-        """實際執行分析管道邏輯
+    # def _execute_analysis_pipeline(self, track_manager: TrackManager,
+    #                              strategies: List[AnalysisStrategy],
+    #                              track_id: Optional[int] = None) -> Dict[int, Dict[str, Any]]:
+    #     """實際執行分析管道邏輯
         
-        Args:
-            track_manager: 軌跡管理器，用於獲取資料
-            strategies: 分析策略列表
-            track_id: 指定軌跡 ID，None 表示分析所有軌跡
+    #     Args:
+    #         track_manager: 軌跡管理器，用於獲取資料
+    #         strategies: 分析策略列表
+    #         track_id: 指定軌跡 ID，None 表示分析所有軌跡
             
-        Returns:
-            分析結果字典
-        """
-        logger.info(f"開始執行分析管道，策略數量: {len(strategies)}")
+    #     Returns:
+    #         分析結果字典
+    #     """
+    #     logger.info(f"開始執行分析管道，策略數量: {len(strategies)}")
         
-        # 建立分析管道
-        pipeline = AnalysisPipeline(strategies)
+    #     # 建立分析管道
+    #     pipeline = AnalysisPipeline(strategies)
         
-        # 從 TrackManager 獲取要分析的軌跡
-        tracks_to_analyze = track_manager.get_tracks_for_analysis(track_id, removed=False)
+    #     # 從 TrackManager 獲取要分析的軌跡
+    #     tracks_to_analyze = track_manager.get_tracks_for_analysis(track_id, removed=False)
         
-        # 過濾出 TRACKED 狀態的軌跡
-        valid_tracks = []
-        for track in tracks_to_analyze:
-            if track.states == TrackState.TRACKED:
-                valid_tracks.append(track)
-            else:
-                logger.warning(f"軌跡 {track.track_id} 不在 TRACKED 狀態，跳過分析")
+    #     # 過濾出 TRACKED 狀態的軌跡
+    #     valid_tracks = []
+    #     for track in tracks_to_analyze:
+    #         if track.states == TrackState.TRACKED:
+    #             valid_tracks.append(track)
+    #         else:
+    #             logger.warning(f"軌跡 {track.track_id} 不在 TRACKED 狀態，跳過分析")
         
-        logger.info(f"找到 {len(valid_tracks)} 個有效軌跡進行分析")
+    #     logger.info(f"找到 {len(valid_tracks)} 個有效軌跡進行分析")
         
-        # 執行分析
-        current_run_results: Dict[int, Dict[str, Any]] = {}
-        for track in valid_tracks:
-            logger.debug(f"為軌跡 {track.track_id} 執行分析管道...")
-            result = pipeline(track)
-            current_run_results[track.track_id] = result
-            logger.debug(f"軌跡 {track.track_id} 分析完成")
+    #     # 執行分析
+    #     current_run_results: Dict[int, Dict[str, Any]] = {}
+    #     for track in valid_tracks:
+    #         logger.debug(f"為軌跡 {track.track_id} 執行分析管道...")
+    #         result = pipeline(track)
+    #         current_run_results[track.track_id] = result
+    #         logger.debug(f"軌跡 {track.track_id} 分析完成")
             
-        logger.info(f"分析管道執行完成，共分析 {len(current_run_results)} 個軌跡")
-        return current_run_results
+    #     logger.info(f"分析管道執行完成，共分析 {len(current_run_results)} 個軌跡")
+    #     return current_run_results
 
     def aggregate_case_segment_summary(
         self,

@@ -39,18 +39,21 @@ class SkeletonExtractionWorkflow:
     - 視覺化
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], workspace_root: Optional[Path] = None):
         self.config = config
+        self._workspace_root = Path(workspace_root) if workspace_root else None
         
         # 初始化各服務 (VideoSource 現在使用 FFmpeg Pipe，無需 TranscodeService)
         self.video_processor = VideoProcessingService(config.get("video_processing", {}))
         self.analysis_service = AnalysisService(config.get("analysis", {}))
-        self.export_service = ExportService(config.get("export", {}))
-        self.visualization_service = SkeletonVisualizationService(config.get("visualization", {}))
+        self.export_service = ExportService(config.get("export", {}), workspace_root=self._workspace_root)
+        self.visualization_service = SkeletonVisualizationService(config.get("visualization", {}), workspace_root=self._workspace_root)
         
-        # 快取設定
+        # 快取設定 - 必須使用 workspace_root 推算路徑
         self._raw_skeleton_config = config.get("export", {}).get("raw_skeleton", {})
-        self._cache_dir = Path(self._raw_skeleton_config.get("output_dir", "./outputs/raw_skeleton"))
+        if not self._workspace_root:
+            raise ValueError("SkeletonExtractionWorkflow 需要 workspace_root 參數才能決定輸出路徑")
+        self._cache_dir = self._workspace_root / "raw_skeleton"
         
         # 建立 Pipeline
         self._pipeline = self._build_pipeline()

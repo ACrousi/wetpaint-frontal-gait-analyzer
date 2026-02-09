@@ -31,26 +31,32 @@ class PredictionWorkflow:
     4. 自動清理臨時檔案
     """
     
-    def __init__(self, config: Dict[str, Any]):
+    # 硬編碼的子目錄名稱（基於 workspace_root）
+    SEG_SKELETON_DIR = "json"
+    
+    def __init__(self, config: Dict[str, Any], workspace_root: Optional[Path] = None):
         """
         初始化預測工作流程
         
         Args:
             config: 配置字典
+            workspace_root: 工作目錄根路徑（可選）
         """
         self.config = config
+        self._workspace_root = Path(workspace_root) if workspace_root else None
         
-        # 骨架提取工作流程
+        # 骨架提取工作流程 - 傳遞 workspace_root
         skeleton_config = config.get("skeleton_extraction", {})
-        self.skeleton_workflow = SkeletonExtractionWorkflow(skeleton_config)
+        self.skeleton_workflow = SkeletonExtractionWorkflow(skeleton_config, workspace_root=self._workspace_root)
         
         # ResGCN 預測器（subprocess 模式）
         predict_config = config.get("predict", {})
         self.predictor = ResGCNPredictor(predict_config)
         
-        # 輸出設定（用於 skip_extraction 模式）
-        export_config = config.get("skeleton_extraction", {}).get("export", config.get("export", {}))
-        self.json_output_dir = Path(export_config.get("seg_skeleton", {}).get("output_dir", "./outputs/json"))
+        # 輸出設定（用於 skip_extraction 模式）- 必須使用 workspace_root 推算路徑
+        if not self._workspace_root:
+            raise ValueError("PredictionWorkflow 需要 workspace_root 參數才能決定輸出路徑")
+        self.json_output_dir = self._workspace_root / self.SEG_SKELETON_DIR
     
     def predict_from_videos(
         self,

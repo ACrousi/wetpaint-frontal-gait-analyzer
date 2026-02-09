@@ -2,7 +2,7 @@ import os
 import re
 import pandas as pd
 from datetime import datetime
-from config.config import ConfigManager
+from src.core.config import ConfigManager
 from src.utils.videoPreprocessing import get_video_paths
 
 def extract_info(text):

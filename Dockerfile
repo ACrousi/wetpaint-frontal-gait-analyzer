@@ -4,7 +4,7 @@
 # Includes: PyTorch 2.6.0, CUDA 12.4 support
 # ============================================================
 
-FROM python:3.10-slim
+FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
@@ -23,49 +23,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ffmpeg \
     libgl1 \
-    libglib2.0-0t64 \
+    libglib2.0-0 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# Install PyTorch (User Requested)
-# ============================================================
-RUN pip install --no-cache-dir \
-    torch==2.6.0 \
-    torchvision==0.21.0 \
-    torchaudio==2.6.0 \
-    --index-url https://download.pytorch.org/whl/cu124
-
-# ============================================================
-# Copy vendor packages (Required for requirements.txt)
-# ============================================================
-COPY vendor/ /app/vendor/
-
-# ============================================================
-# Install Python dependencies
-# ============================================================
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
-
-# ============================================================
-# Sanity check
-# ============================================================
-RUN python -c "\
-import torch; \
-print(f'PyTorch version: {torch.__version__}'); \
-print(f'CUDA available: {torch.cuda.is_available()}'); \
-if torch.cuda.is_available(): print(f'CUDA version: {torch.version.cuda}');"
-
-# ============================================================
-# Copy application source code
-# ============================================================
-# COPY src/ /app/src/
-# COPY config/ /app/config/
-# COPY main.py /app/
-# COPY start_api.py /app/
-
-# Create necessary directories
-RUN mkdir -p /app/data /app/outputs /app/logs /app/models
 
 # ============================================================
 # Environment variables
@@ -75,11 +35,54 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONNOUSERSITE=1
 
 # ============================================================
-# Expose API port
+# Install PyTorch (User Requested)
 # ============================================================
-EXPOSE 8000
+# RUN pip install --no-cache-dir \
+#     torch==2.6.0 \
+#     torchvision==0.21.0 \
+#     torchaudio==2.6.0 \
+#     --extra-index-url https://download.pytorch.org/whl/cu124
+
+# ============================================================
+# GPU available check
+# ============================================================
+# RUN python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda}') if torch.cuda.is_available() else None"
+
+# ============================================================
+# Copy vendor packages (Required for requirements.txt)
+# ============================================================
+# COPY vendor/ /app/vendor/
+
+# ============================================================
+# Install Python dependencies
+# ============================================================
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ============================================================
+# Install Vendor Packages (Cached Layer)
+# ============================================================
+# Copy vendor directory specifically to cache this layer 
+# unless vendor packages change.
+COPY vendor /app/vendor
+
+# Install vendor packages
+# Using --no-deps inside vendor install if their deps are already in requirements.txt
+# or let pip handle it.
+RUN pip install --no-cache-dir \
+    /app/vendor/BoTSORT \
+    /app/vendor/rtmlib \
+    /app/vendor/ResGCNv1
+
+# ============================================================
+# Copy application source code
+# ============================================================
+COPY . /app
+
+# Create necessary directories
+RUN mkdir -p /app/data /app/outputs /app/logs /app/models
 
 # ============================================================
 # Default command - Run API server
 # ============================================================
-CMD ["python", "start_api.py"]
+ENTRYPOINT ["python", "main.py"]
