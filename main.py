@@ -132,6 +132,8 @@ def main():
                     details={"valid_options": ["gcn", "xgboost"]}
                 )
 
+            return
+
         elif mode == "predict":
             if args.model != 'gcn':
                 raise ArgumentError(

@@ -130,6 +130,7 @@ class Processor(Initializer):
 
             if use_ldl:
                 eval_metric = 0  # MAE for regression
+                eval_mse = 0  # MSE for regression
                 metric_name = 'MAE'
                 # Collect predictions and targets for ranking correlations
                 all_pred_expectations = []
@@ -186,6 +187,7 @@ class Processor(Initializer):
                     if original_label is not None:
                         original_label_tensor = original_label.float().to(self.device)
                         eval_metric += torch.abs(pred_expectation - original_label_tensor).sum().item()
+                        eval_mse += ((pred_expectation - original_label_tensor) ** 2).sum().item()
                         # Collect for ranking correlations
                         all_pred_expectations.extend(pred_expectation.cpu().numpy().tolist())
                         all_target_labels.extend(original_label.cpu().numpy().tolist())
@@ -193,6 +195,7 @@ class Processor(Initializer):
                         # Fallback to target_expectation if original_label not available
                         target_expectation = torch.sum(y * self.bin_centers.to(self.device), dim=1)
                         eval_metric += torch.abs(pred_expectation - target_expectation).sum().item()
+                        eval_mse += ((pred_expectation - target_expectation) ** 2).sum().item()
                         # Collect for ranking correlations
                         all_pred_expectations.extend(pred_expectation.cpu().numpy().tolist())
                         all_target_labels.extend(target_expectation.cpu().numpy().tolist())
@@ -230,18 +233,20 @@ class Processor(Initializer):
 
         if use_ldl:
             eval_metric /= num_sample  # MAE
+            eval_mse /= num_sample  # MSE
             self.val_mae_values.append(eval_metric)
             
             # Calculate Spearman and Kendall ranking correlations
             spearman_corr, spearman_p = spearmanr(all_target_labels, all_pred_expectations)
             kendall_corr, kendall_p = kendalltau(all_target_labels, all_pred_expectations)
             
-            logging.info('MAE: {:.4f}, Mean loss:{:.4f}'.format(eval_metric, eval_loss))
+            logging.info('MAE: {:.4f}, MSE: {:.4f}, Mean loss:{:.4f}'.format(eval_metric, eval_mse, eval_loss))
             logging.info('Spearman ρ: {:.4f} (p={:.4e}), Kendall τ: {:.4f} (p={:.4e})'.format(
                 spearman_corr, spearman_p, kendall_corr, kendall_p
             ))
             if self.scalar_writer:
                 self.scalar_writer.add_scalar('eval_mae', eval_metric, self.global_step)
+                self.scalar_writer.add_scalar('eval_mse', eval_mse, self.global_step)
                 self.scalar_writer.add_scalar('eval_spearman', spearman_corr, self.global_step)
                 self.scalar_writer.add_scalar('eval_kendall', kendall_corr, self.global_step)
         else:
@@ -262,7 +267,7 @@ class Processor(Initializer):
 
         torch.cuda.empty_cache()
         if use_ldl:
-            return eval_metric, spearman_corr, None  # Return MAE, Spearman, cm
+            return eval_metric, eval_mse, spearman_corr, None  # Return MAE, MSE, Spearman, cm
         else:
             return acc_top1, acc_top5, cm
 
@@ -290,12 +295,12 @@ class Processor(Initializer):
             # Resuming
             start_epoch = 0
             use_ldl = getattr(self.args, 'use_ldl', False)
-            # Get best_metric_criterion from config: 'mae' or 'spearman'
+            # Get best_metric_criterion from config: 'mae', 'mse', or 'spearman'
             best_metric_criterion = getattr(self.args, 'best_metric_criterion', 'mae')
             if use_ldl:
-                # Initialize best_state with both MAE and Spearman
-                best_state = {'mae': float('inf'), 'spearman': -float('inf'), 'cm': None}
-                best_metric_key = best_metric_criterion  # 'mae' or 'spearman'
+                # Initialize best_state with MAE, MSE, and Spearman
+                best_state = {'mae': float('inf'), 'mse': float('inf'), 'spearman': -float('inf'), 'cm': None}
+                best_metric_key = best_metric_criterion  # 'mae', 'mse', or 'spearman'
                 logging.info(f'Using best model criterion: {best_metric_criterion}')
             else:
                 best_state = {'acc_top1':0, 'acc_top5':0, 'cm':0}
@@ -329,10 +334,11 @@ class Processor(Initializer):
                 is_best = False
                 if (epoch+1) % self.eval_interval(epoch) == 0:
                     logging.info('Evaluating for epoch {}/{} ...'.format(epoch+1, self.max_epoch))
-                    eval_mae, eval_spearman, cm = self.eval()
+                    eval_mae, eval_mse, eval_spearman, cm = self.eval()
                     if use_ldl:
                         # Update best_state with current metrics
                         current_mae = eval_mae
+                        current_mse = eval_mse
                         current_spearman = eval_spearman
                         
                         # Determine if this is the best model based on criterion
@@ -340,13 +346,19 @@ class Processor(Initializer):
                             # Higher Spearman is better
                             if current_spearman > best_state['spearman']:
                                 is_best = True
-                                best_state.update({'mae': current_mae, 'spearman': current_spearman, 'cm': cm})
+                                best_state.update({'mae': current_mae, 'mse': current_mse, 'spearman': current_spearman, 'cm': cm})
                             best_metric_name = 'Spearman'
+                        elif best_metric_criterion == 'mse':
+                            # Lower MSE is better
+                            if current_mse < best_state['mse']:
+                                is_best = True
+                                best_state.update({'mae': current_mae, 'mse': current_mse, 'spearman': current_spearman, 'cm': cm})
+                            best_metric_name = 'MSE'
                         else:  # 'mae'
                             # Lower MAE is better
                             if current_mae < best_state['mae']:
                                 is_best = True
-                                best_state.update({'mae': current_mae, 'spearman': current_spearman, 'cm': cm})
+                                best_state.update({'mae': current_mae, 'mse': current_mse, 'spearman': current_spearman, 'cm': cm})
                             best_metric_name = 'MAE'
                     else:
                         current_metric = eval_mae  # acc_top1
@@ -367,12 +379,16 @@ class Processor(Initializer):
                 )
                 if use_ldl:
                     if best_metric_criterion == 'spearman':
-                        logging.info('Best Spearman: {:.4f} (MAE: {:.4f}), Total time: {}'.format(
-                            best_state['spearman'], best_state['mae'], U.get_time(time()-start_time)
+                        logging.info('Best Spearman: {:.4f} (MAE: {:.4f}, MSE: {:.4f}), Total time: {}'.format(
+                            best_state['spearman'], best_state['mae'], best_state['mse'], U.get_time(time()-start_time)
+                        ))
+                    elif best_metric_criterion == 'mse':
+                        logging.info('Best MSE: {:.4f} (MAE: {:.4f}, Spearman: {:.4f}), Total time: {}'.format(
+                            best_state['mse'], best_state['mae'], best_state['spearman'], U.get_time(time()-start_time)
                         ))
                     else:
-                        logging.info('Best MAE: {:.4f} (Spearman: {:.4f}), Total time: {}'.format(
-                            best_state['mae'], best_state['spearman'], U.get_time(time()-start_time)
+                        logging.info('Best MAE: {:.4f} (MSE: {:.4f}, Spearman: {:.4f}), Total time: {}'.format(
+                            best_state['mae'], best_state['mse'], best_state['spearman'], U.get_time(time()-start_time)
                         ))
                 else:
                     logging.info('Best top-1 accuracy: {:.2%}, Total time: {}'.format(
@@ -512,7 +528,10 @@ class Processor(Initializer):
 
         # Saving Data
         if not self.args.debug:
-            U.create_folder('./visualization')
+            import os
+            vis_dir = os.path.join(self.args.work_dir, 'visualization')
+            U.create_folder(vis_dir)
+            config_name = os.path.splitext(os.path.basename(self.args.config))[0]
             save_dict = {
                 'data': all_data, 'label': all_labels, 'name': all_names, 'out': all_out, 'cm': cm,
                 'feature': all_features, 'weight': weight, 'location': all_locations, 'class_label': all_class_labels
@@ -521,7 +540,9 @@ class Processor(Initializer):
                 save_dict['bin_centers'] = self.bin_centers.cpu().numpy()
                 save_dict['pred_expectations'] = all_pred_expectations
                 save_dict['target_expectations'] = all_target_expectations
-            np.savez('./visualization/extraction_{}.npz'.format(self.args.config), **save_dict)
+            save_path = os.path.join(vis_dir, 'extraction_{}.npz'.format(config_name))
+            np.savez(save_path, **save_dict)
+            logging.info('Saved extraction to: {}'.format(save_path))
         logging.info('Finish extracting!')
         logging.info('')
 

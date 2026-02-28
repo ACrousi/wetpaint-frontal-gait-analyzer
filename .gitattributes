@@ -1,0 +1,49 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Shell scripts MUST use LF to avoid execution issues in Unix/Linux/Docker
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Windows specific files use CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Source code
+*.py text diff=python
+*.c text
+*.cpp text
+*.h text
+
+# Configuration and textual data
+*.json text
+*.yaml text
+*.yml text
+*.toml text
+*.xml text
+*.ini text
+*.csv text
+*.txt text
+
+# Documentation
+*.md text diff=markdown
+
+# Docker
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+
+# Binary files (Images, Weights, etc. - no EOL conversion)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.pdf binary
+*.pt binary
+*.pth binary
+*.onnx binary
+*.pkl binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.mp4 binary
+*.avi binary

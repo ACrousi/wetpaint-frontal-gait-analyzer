@@ -76,7 +76,7 @@ def load_checkpoint(work_dir, model_name='resume'):
                 logging.info('Wrong choice!')
         file_name = '{}/{}/{}.pth.tar'.format(work_dir, dirs[idx], model_name)
     if os.path.exists(file_name):
-        return torch.load(file_name, map_location=torch.device('cpu'))
+        return torch.load(file_name, map_location=torch.device('cpu'), weights_only=False)
     else:
         logging.info('')
         logging.error('Error: Do NOT exist this checkpoint: {}!'.format(file_name))

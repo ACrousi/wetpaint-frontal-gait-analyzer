@@ -110,7 +110,7 @@ def init_parameters():
     parser.add_argument('--ordinal_weight', type=float, default=1.0, help='Weight for ordinal (EMD) term in OrdinalLoss')
     parser.add_argument('--early_stop_patience', type=int, default=100000, help='Early stopping patience')
     parser.add_argument('--save_interval', type=int, default=0, help='Save model checkpoint every N epochs (0 = disabled)')
-    parser.add_argument('--best_metric_criterion', type=str, default='mae', help='Best model criterion for LDL: mae or spearman')
+    parser.add_argument('--best_metric_criterion', type=str, default='mae', help='Best model criterion for LDL: mae, mse, or spearman')
 
     return parser
 

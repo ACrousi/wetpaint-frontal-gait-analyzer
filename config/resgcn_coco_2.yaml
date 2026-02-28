@@ -78,12 +78,13 @@ scheduler_args:
 # Loss function settings
 use_ldl: true  # 使用 Label Distribution Learning
 loss_type: ordinal   # 損失函數類型：ordinal (KL + λ*EMD)、kl (PDF比較)、mse、mae
-ordinal_weight: 1.0  # λ：EMD (排序約束) 的權重，越大越強調順序關係
+ordinal_weight: 2.0  # λ：EMD (排序約束) 的權重，越大越強調順序關係
 reg_weight: 0.0      # MAE Regularization weight (僅用於 LDLLossWithL1)
 early_stop_patience: 200 # Early stopping patience
 save_interval: 30  # Save model checkpoint every N epochs (0 = disabled)
 
-# Best model selection criterion for LDL: 'mae' or 'spearman'
+# Best model selection criterion for LDL: 'mae', 'mse', or 'spearman'
 # - mae: Lower MAE is better (minimize prediction error)
+# - mse: Lower MSE is better (minimize squared prediction error)
 # - spearman: Higher Spearman ρ is better (maximize ranking correlation)
 best_metric_criterion: spearman
