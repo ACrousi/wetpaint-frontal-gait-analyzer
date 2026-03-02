@@ -1,0 +1,62 @@
+# ====================================
+# Baseline: CTR-GCN（對比 ResGCN）
+# ====================================
+workspace_root: "../../outputs"
+
+config: resgcn_coco
+dataset: coco
+gpus: [0]
+seed: 1
+work_dir: 'baseline_ctrgcn/'
+no_progress_bar: False
+
+dataset_args:
+  coco:
+    input_path: json
+    path: ""
+    use_gait: false
+    train_batch_size: 16
+    eval_batch_size: 16
+    seed: 42
+    metadata_path: json/analysis_metadata.csv
+    data_path: coco/train_data.npy
+    label_path: coco/train_label.pkl
+    eval_data_path: coco/eval_data.npy
+    eval_label_path: coco/eval_label.pkl
+    use_ldl: true
+    ldl_config:
+      type: gaussian
+      sigma: 1.0
+      exact_iterations: 10
+    custom_bin_centers: [12, 16, 20, 24, 28, 32, 36]
+    num_class: 7
+    ldl_min_label: 12
+    ldl_max_label: 36
+
+# === Baseline 變量: CTR-GCN 模型 ===
+model_type: ctrgcn
+model_args:
+  num_head: 3
+  dropout: 0.0
+
+optimizer: SGD
+optimizer_args:
+  SGD:
+    lr: 0.01
+    momentum: 0.9
+    nesterov: true
+    weight_decay: 0.001
+
+lr_scheduler: cosine
+scheduler_args:
+  cosine:
+    max_epoch: 200
+    warm_up: 10
+    eta_min: 1e-6
+
+use_ldl: true
+loss_type: ordinal
+ordinal_weight: 2.0
+early_stop_patience: 200
+save_interval: 30
+best_metric_criterion: spearman

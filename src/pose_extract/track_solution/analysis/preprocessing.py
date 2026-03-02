@@ -4,6 +4,7 @@ import logging
 import numpy as np
 import scipy.signal as sig
 
+
 from src.pose_extract.track_solution import TrackManager
 from src.pose_extract.track_solution import TrackRecord
 from .base import logger
@@ -256,43 +257,29 @@ class RemoveShortTracksPreprocessor(Preprocessor):
 
 class KeypointsNormalizationPreprocessor(Preprocessor):
     """
-    關鍵點正規化預處理器（五步驟標準化流程）：
-    1. 旋轉標準化：將身體軀幹垂直於地面（對齊Y軸）
-    2. 平移標準化：以肩部中心為原點進行置中
-    3. 尺度標準化：基於軀幹長度進行尺度正規化
-    4. 高斯平滑：對時間序列應用高斯濾波器進行平滑化
-    5. 解析度標準化：將座標正規化到 [0,1] 範圍
+    關鍵點正規化預處理器（標準化流程）：
+    1. 平移標準化：以肩部中心為原點進行置中
+    2. 尺度標準化：基於軀幹長度進行尺度正規化，並歸一化到 [-1, 1] 範圍
 
-    適合作為機器學習模型的輸入預處理，消除方向、位置、尺度、噪聲和解析度的影響
+    適合作為機器學習模型的輸入預處理，消除位置和尺度的影響
     """
 
     def __init__(self,
-                 image_width: int = 1920,
-                 image_height: int = 1080,
                  center_keypoint: str = "shoulder_center",
                  scale_method: str = "fixed_torso_length",
                  reference_scale: float = 2.0,
-                 enable_smoothing: bool = True,
-                 gauss_sigma: float = 1.0):
+                 **kwargs):
         """
         初始化關鍵點正規化預處理器
 
         Args:
-            image_width: 影像寬度，用於解析度標準化
-            image_height: 影像高度，用於解析度標準化
             center_keypoint: 中心關鍵點選擇 ("shoulder_center", "hip_center", "torso_center")
             scale_method: 尺度計算方法 ("median_torso_length", "fixed_torso_length")
             reference_scale: 參考尺度值，用於尺度標準化
-            enable_smoothing: 是否啟用高斯平滑功能
-            gauss_sigma: 高斯濾波器的標準差，用於平滑化處理（當 enable_smoothing=True 時生效）
         """
-        self.image_width = image_width
-        self.image_height = image_height
         self.center_keypoint = center_keypoint
         self.scale_method = scale_method
         self.reference_scale = reference_scale
-        self.enable_smoothing = enable_smoothing
-        self.gauss_sigma = gauss_sigma
 
     @property
     def name(self) -> str:
@@ -337,23 +324,16 @@ class KeypointsNormalizationPreprocessor(Preprocessor):
             # 步驟 3: 尺度標準化（基於軀幹長度正規化）
             scale_normalized = self._apply_scale_normalization(translation_normalized, track.track_id)
 
-            # 步驟 4: 解析度標準化（正規化到 [-1,1] 範圍）
-            resolution_normalized = self._apply_resolution_normalization(scale_normalized, track.track_id)
-
-            # 步驟 5: 高斯平滑（對時間序列應用高斯濾波器進行平滑化）
-            # smooth_normalized = self._apply_gaussian_smoothing(resolution_normalized, track.track_id) if self.enable_smoothing else resolution_normalized
-
-            # 解析度標準化後再以肩部中心為原點進行平移
-            final_normalized = self._apply_translation_normalization(resolution_normalized, track.track_id)
+            # 步驟 4: 高斯平滑（對時間序列應用高斯濾波器進行平滑化）
+            # smooth_normalized = self._apply_gaussian_smoothing(scale_normalized, track.track_id) if self.enable_smoothing else scale_normalized
 
             # 儲存正規化結果到 track 物件
-            track.keypoints_normalized = final_normalized
+            track.keypoints_normalized = scale_normalized
 
             processed_tracks += 1
-            total_frames_processed += len(final_normalized)
+            total_frames_processed += len(scale_normalized)
 
-        smoothing_status = "含高斯平滑" if self.enable_smoothing else "不含平滑"
-        logger.info(f'關鍵點正規化完成（{smoothing_status}，解析度正規化後再平移），處理了 {processed_tracks} 個軌跡，共 {total_frames_processed} 個幀。')
+        logger.info(f'關鍵點正規化完成（平移 + 尺度標準化），處理了 {processed_tracks} 個軌跡，共 {total_frames_processed} 個幀。')
 
         return {
             "processed_tracks": processed_tracks,
@@ -382,40 +362,7 @@ class KeypointsNormalizationPreprocessor(Preprocessor):
 
         return valid_keypoints
 
-    def _apply_resolution_normalization(self, keypoints_dict: Dict[int, np.ndarray], track_id: int) -> Dict[int, np.ndarray]:
-        """
-        解析度標準化 - 將座標正規化，除以影像寬高
 
-        這是最後一步，將經過所有預處理的座標除以影像寬高進行正規化。
-
-        Args:
-            keypoints_dict: 高斯平滑後的關鍵點字典 {frame_id: keypoints}
-            track_id: 軌跡ID，用於日誌
-
-        Returns:
-            解析度正規化後的關鍵點字典
-        """
-        if not keypoints_dict:
-            return {}
-
-        normalized_keypoints = {}
-
-        for fid, kp in keypoints_dict.items():
-            normalized_kp = kp.copy()
-
-            # 只對非零點進行正規化
-            valid_mask = ~np.all(kp == 0, axis=1)
-
-            # 統一除以影像寬高最大值進行正規化
-            norm_div = max(self.image_width, self.image_height)
-            norm_div = 4.0
-            normalized_kp[valid_mask, 0] = kp[valid_mask, 0] / norm_div
-            normalized_kp[valid_mask, 1] = kp[valid_mask, 1] / norm_div
-
-            normalized_keypoints[fid] = normalized_kp
-
-        logger.debug(f'Track {track_id}: 解析度標準化完成，處理了 {len(normalized_keypoints)} 個幀。')
-        return normalized_keypoints
 
     def _apply_translation_normalization(self, keypoints_dict: Dict[int, np.ndarray], track_id: int) -> Dict[int, np.ndarray]:
         """
@@ -446,131 +393,7 @@ class KeypointsNormalizationPreprocessor(Preprocessor):
         logger.debug(f'Track {track_id}: 平移標準化完成，處理了 {len(translated_keypoints)} 個幀。')
         return translated_keypoints
 
-    def _apply_rotation_normalization(self, keypoints_dict: Dict[int, np.ndarray], track_id: int) -> Dict[int, np.ndarray]:
-        """
-        旋轉標準化 - 將身體軀幹垂直於地面（對齊Y軸）
 
-        通過計算軀幹方向（肩部中心到髖部中心的向量）並將其對齊到Y軸正方向來實現旋轉標準化。
-        在原始像素座標上執行，保持像素空間的準確性。
-
-        Args:
-            keypoints_dict: 原始關鍵點字典 {frame_id: keypoints}
-            track_id: 軌跡ID，用於日誌
-
-        Returns:
-            旋轉標準化後的關鍵點字典
-        """
-        rotated_keypoints = {}
-
-        for fid, kp in keypoints_dict.items():
-            # 計算軀幹方向向量（從肩部中心到髖部中心）
-            torso_vector = self._calculate_torso_vector(kp)
-            if torso_vector is None:
-                logger.debug(f'Track {track_id} Frame {fid}: 無法計算軀幹方向，跳過旋轉標準化。')
-                rotated_keypoints[fid] = kp.copy()  # 保留原始資料
-                continue
-
-            target_vector = np.array([0.0, 1.0])  # Y軸正方向（向上）
-            rotation_angle = self._calculate_rotation_angle(torso_vector, target_vector)
-
-            # 應用旋轉變換
-            rotated_kp = self._apply_rotation_transform(kp, rotation_angle)
-            rotated_keypoints[fid] = rotated_kp
-
-        logger.debug(f'Track {track_id}: 旋轉標準化完成，處理了 {len(rotated_keypoints)} 個幀。')
-        return rotated_keypoints
-
-    def _calculate_torso_vector(self, keypoints: np.ndarray) -> Optional[np.ndarray]:
-        """
-        計算軀幹方向向量（從肩部中心到髖部中心）
-
-        Args:
-            keypoints: 關鍵點數組 (17, 2)
-
-        Returns:
-            軀幹方向向量，如果無法計算則返回 None
-        """
-        # 計算肩部中心 (COCO: 5=左肩, 6=右肩)
-        left_shoulder, right_shoulder = keypoints[5], keypoints[6]
-        if np.allclose(left_shoulder, 0) or np.allclose(right_shoulder, 0):
-            return None
-        shoulder_center = (left_shoulder + right_shoulder) / 2
-
-        # 計算髖部中心 (COCO: 11=左髖, 12=右髖)
-        left_hip, right_hip = keypoints[11], keypoints[12]
-        if np.allclose(left_hip, 0) or np.allclose(right_hip, 0):
-            return None
-        hip_center = (left_hip + right_hip) / 2
-
-        # 計算從肩部中心到髖部中心的向量
-        torso_vector = hip_center - shoulder_center
-
-        # 檢查向量長度是否有效
-        torso_length = np.linalg.norm(torso_vector)
-        if torso_length < 1e-6:
-            return None
-
-        # 正規化向量
-        return torso_vector / torso_length
-
-    def _calculate_rotation_angle(self, current_vector: np.ndarray, target_vector: np.ndarray) -> float:
-        """
-        計算將 current_vector 旋轉到 target_vector 所需的角度
-
-        Args:
-            current_vector: 當前向量（已正規化）
-            target_vector: 目標向量（已正規化）
-
-        Returns:
-            旋轉角度（弧度）
-        """
-        # 確保向量已正規化
-        current_norm = current_vector / np.linalg.norm(current_vector)
-        target_norm = target_vector / np.linalg.norm(target_vector)
-
-        # 計算點積和叉積
-        dot_product = np.dot(current_norm, target_norm)
-        cross_product = np.cross(current_norm, target_norm)
-
-        # 限制點積範圍避免數值誤差
-        dot_product = np.clip(dot_product, -1.0, 1.0)
-
-        # 計算角度
-        angle = np.arccos(dot_product)
-
-        # 根據叉積的符號決定旋轉方向
-        if cross_product < 0:
-            angle = -angle
-
-        return angle
-
-    def _apply_rotation_transform(self, keypoints: np.ndarray, angle: float) -> np.ndarray:
-        """
-        對關鍵點應用旋轉變換
-
-        Args:
-            keypoints: 關鍵點數組 (17, 2)
-            angle: 旋轉角度（弧度）
-
-        Returns:
-            旋轉後的關鍵點數組
-        """
-        rotated_kp = keypoints.copy()
-
-        # 建立2D旋轉矩陣
-        cos_angle = np.cos(angle)
-        sin_angle = np.sin(angle)
-        rotation_matrix = np.array([
-            [cos_angle, -sin_angle],
-            [sin_angle, cos_angle]
-        ])
-
-        # 只對非零關鍵點應用旋轉
-        valid_mask = ~np.all(keypoints == 0, axis=1)
-        if np.any(valid_mask):
-            rotated_kp[valid_mask] = (rotation_matrix @ keypoints[valid_mask].T).T
-
-        return rotated_kp
 
     def _apply_scale_normalization(self, keypoints_dict: Dict[int, np.ndarray], track_id: int) -> Dict[int, np.ndarray]:
         """
@@ -614,8 +437,9 @@ class KeypointsNormalizationPreprocessor(Preprocessor):
                 logger.debug(f'Track {track_id} Frame {fid}: 無法計算尺度因子，跳過。')
                 continue
 
-            # 應用尺度標準化
-            scale_factor = reference_scale_factor / current_scale
+            # 應用尺度標準化，並除以 reference_scale * 2 將座標歸一化到 [-1, 1] 範圍
+            norm_div = reference_scale_factor * 2
+            scale_factor = reference_scale_factor / current_scale / norm_div
             scaled_kp = kp.copy()
             valid_mask = ~np.all(kp == 0, axis=1)
             scaled_kp[valid_mask] = kp[valid_mask] * scale_factor
@@ -695,6 +519,124 @@ class KeypointsNormalizationPreprocessor(Preprocessor):
         torso_length = np.linalg.norm(shoulder_center - hip_center)
         return torso_length if torso_length > 1e-6 else None
 
+    def _apply_rotation_normalization(self, keypoints_dict: Dict[int, np.ndarray], track_id: int) -> Dict[int, np.ndarray]:
+        """
+        旋轉標準化 - 將身體軀幹垂直於地面（對齊Y軸）
+
+        通過計算軀幹方向（肩部中心到髖部中心的向量）並將其對齊到Y軸正方向來實現旋轉標準化。
+        在原始像素座標上執行，保持像素空間的準確性。
+
+        Args:
+            keypoints_dict: 原始關鍵點字典 {frame_id: keypoints}
+            track_id: 軌跡ID，用於日誌
+
+        Returns:
+            旋轉標準化後的關鍵點字典
+        """
+        rotated_keypoints = {}
+
+        for fid, kp in keypoints_dict.items():
+            # 計算軀幹方向向量（從肩部中心到髖部中心）
+            torso_vector = self._calculate_torso_vector(kp)
+            if torso_vector is None:
+                logger.debug(f'Track {track_id} Frame {fid}: 無法計算軀幹方向，跳過旋轉標準化。')
+                rotated_keypoints[fid] = kp.copy()  # 保留原始資料
+                continue
+
+            target_vector = np.array([0.0, 1.0])  # Y軸正方向（向下）
+            rotation_angle = self._calculate_rotation_angle(torso_vector, target_vector)
+
+            # 應用旋轉變換
+            rotated_kp = self._apply_rotation_transform(kp, rotation_angle)
+            rotated_keypoints[fid] = rotated_kp
+
+        logger.debug(f'Track {track_id}: 旋轉標準化完成，處理了 {len(rotated_keypoints)} 個幀。')
+        return rotated_keypoints
+
+    def _calculate_torso_vector(self, keypoints: np.ndarray) -> Optional[np.ndarray]:
+        """
+        計算軀幹方向向量（從肩部中心到髖部中心）
+
+        Args:
+            keypoints: 關鍵點數組 (17, 2)
+
+        Returns:
+            軀幹方向向量，如果無法計算則返回 None
+        """
+        # 計算肩部中心 (COCO: 5=左肩, 6=右肩)
+        left_shoulder, right_shoulder = keypoints[5], keypoints[6]
+        if np.allclose(left_shoulder, 0) or np.allclose(right_shoulder, 0):
+            return None
+        shoulder_center = (left_shoulder + right_shoulder) / 2
+
+        # 計算髖部中心 (COCO: 11=左髖, 12=右髖)
+        left_hip, right_hip = keypoints[11], keypoints[12]
+        if np.allclose(left_hip, 0) or np.allclose(right_hip, 0):
+            return None
+        hip_center = (left_hip + right_hip) / 2
+
+        # 計算從肩部中心到髖部中心的向量
+        torso_vector = hip_center - shoulder_center
+
+        # 檢查向量長度是否有效
+        torso_length = np.linalg.norm(torso_vector)
+        if torso_length < 1e-6:
+            return None
+
+        # 正規化向量
+        return torso_vector / torso_length
+
+    def _calculate_rotation_angle(self, current_vector: np.ndarray, target_vector: np.ndarray) -> float:
+        """
+        計算將 current_vector 旋轉到 target_vector 所需的角度
+
+        Args:
+            current_vector: 當前向量（已正規化）
+            target_vector: 目標向量（已正規化）
+
+        Returns:
+            旋轉角度（弧度）
+        """
+        current_norm = current_vector / np.linalg.norm(current_vector)
+        target_norm = target_vector / np.linalg.norm(target_vector)
+
+        dot_product = np.dot(current_norm, target_norm)
+        cross_product = np.cross(current_norm, target_norm)
+
+        dot_product = np.clip(dot_product, -1.0, 1.0)
+        angle = np.arccos(dot_product)
+
+        if cross_product < 0:
+            angle = -angle
+
+        return angle
+
+    def _apply_rotation_transform(self, keypoints: np.ndarray, angle: float) -> np.ndarray:
+        """
+        對關鍵點應用旋轉變換
+
+        Args:
+            keypoints: 關鍵點數組 (17, 2)
+            angle: 旋轉角度（弧度）
+
+        Returns:
+            旋轉後的關鍵點數組
+        """
+        rotated_kp = keypoints.copy()
+
+        cos_angle = np.cos(angle)
+        sin_angle = np.sin(angle)
+        rotation_matrix = np.array([
+            [cos_angle, -sin_angle],
+            [sin_angle, cos_angle]
+        ])
+
+        valid_mask = ~np.all(keypoints == 0, axis=1)
+        if np.any(valid_mask):
+            rotated_kp[valid_mask] = (rotation_matrix @ keypoints[valid_mask].T).T
+
+        return rotated_kp
+
     def _apply_gaussian_smoothing(self, keypoints_dict: Dict[int, np.ndarray], track_id: int) -> Dict[int, np.ndarray]:
         """
         高斯平滑 - 對關鍵點時間序列應用高斯濾波器進行平滑化
@@ -710,60 +652,49 @@ class KeypointsNormalizationPreprocessor(Preprocessor):
             logger.debug(f'Track {track_id}: 高斯平滑被禁用或無資料，跳過平滑化。')
             return keypoints_dict
 
-        # 獲取排序的幀 ID
         frame_ids = sorted(keypoints_dict.keys())
-        if len(frame_ids) < 3:  # 至少需要3個點才能進行有效的平滑化
+        if len(frame_ids) < 3:
             logger.debug(f'Track {track_id}: 幀數太少 ({len(frame_ids)})，跳過高斯平滑。')
             return keypoints_dict
 
         smoothed_keypoints = {}
 
-        # 建立高斯濾波器
-        window_size = int(self.gauss_sigma * 6 + 1) | 1  # 確保是奇數
+        window_size = int(self.gauss_sigma * 6 + 1) | 1
         gaussian_kernel = sig.windows.gaussian(window_size, std=self.gauss_sigma)
         gaussian_kernel /= gaussian_kernel.sum()
 
-        # 對每個關鍵點的每個座標進行平滑化
-        for kp_idx in range(17):  # COCO 有 17 個關鍵點
-            for coord_idx in range(2):  # x, y 座標
-                # 收集時間序列資料
+        for kp_idx in range(17):
+            for coord_idx in range(2):
                 time_series = []
                 valid_mask = []
 
                 for fid in frame_ids:
                     kp = keypoints_dict[fid]
-                    # 檢查該關鍵點是否有效（非零值）
                     if not np.allclose(kp[kp_idx], 0):
                         time_series.append(kp[kp_idx, coord_idx])
                         valid_mask.append(True)
                     else:
-                        time_series.append(0.0)  # 填入0，但標記為無效
+                        time_series.append(0.0)
                         valid_mask.append(False)
 
                 time_series = np.array(time_series)
                 valid_mask = np.array(valid_mask)
 
-                # 只對有效點進行平滑化
                 if valid_mask.sum() < 3:
                     continue
 
                 try:
-                    # 提取有效值進行平滑化
                     valid_values = time_series[valid_mask]
-
-                    # 計算填充長度
                     pad_len = min(len(valid_values) - 1, window_size // 2)
                     if pad_len < 0:
                         pad_len = 0
 
-                    # 應用濾波器
                     if len(valid_values) > pad_len * 2 + 1:
                         smoothed_valid = sig.filtfilt(
                             gaussian_kernel, [1.0], valid_values,
                             padlen=pad_len, method='pad'
                         )
 
-                        # 將平滑化的值放回原位置
                         valid_idx = 0
                         for i, fid in enumerate(frame_ids):
                             if valid_mask[i]:
@@ -778,13 +709,13 @@ class KeypointsNormalizationPreprocessor(Preprocessor):
                     logger.debug(f'Track {track_id} 關鍵點 {kp_idx} 座標 {coord_idx}: 高斯平滑失敗 - {e}')
                     continue
 
-        # 對於沒有被平滑化的幀，保留原始資料
         for fid, kp in keypoints_dict.items():
             if fid not in smoothed_keypoints:
                 smoothed_keypoints[fid] = kp.copy()
 
         logger.debug(f'Track {track_id}: 高斯平滑完成（sigma={self.gauss_sigma}），處理了 {len(smoothed_keypoints)} 個幀。')
         return smoothed_keypoints
+
 
 class PreprocessingPipeline:
     """

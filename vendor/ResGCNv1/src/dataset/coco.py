@@ -182,7 +182,8 @@ class Feeder(Dataset):
             label_dist = self._label_to_distribution(label)
             original_label = label  # 保留原始標籤用於 MAE 計算
         else:
-            label_dist = label
+            # Regression or classification: use raw label as float
+            label_dist = np.float32(label)
             original_label = label
 
         if self.model_type == 'gaitmlp':

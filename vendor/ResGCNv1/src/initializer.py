@@ -71,6 +71,8 @@ class Initializer():
         self.val_losses = []
         self.train_mae_values = []
         self.val_mae_values = []
+        self.train_mse_values = []
+        self.val_mse_values = []
         if self.args.debug:
             self.no_progress_bar = True
             self.model_name = 'debug'
@@ -228,6 +230,7 @@ class Initializer():
     def init_loss_func(self):
         # Check if LDL is enabled in config
         use_ldl = getattr(self.args, 'use_ldl', False)
+        task_mode = getattr(self.args, 'task_mode', None)
         loss_type = getattr(self.args, 'loss_type', 'ce')
         reg_weight = getattr(self.args, 'reg_weight', 0.0)
 
@@ -255,6 +258,14 @@ class Initializer():
                 from .losses import ExpectationLoss
                 self.loss_func = ExpectationLoss(base_loss=loss_type).to(self.device)
                 logging.info('Loss function: ExpectationLoss with {} base loss (LDL enabled)'.format(loss_type.upper()))
+        elif task_mode == 'regression':
+            # Direct regression mode (no LDL): use MSE or MAE loss
+            if loss_type.lower() == 'mae':
+                self.loss_func = torch.nn.L1Loss().to(self.device)
+                logging.info('Loss function: L1Loss (regression mode)')
+            else:
+                self.loss_func = torch.nn.MSELoss().to(self.device)
+                logging.info('Loss function: MSELoss (regression mode)')
         else:
             self.loss_func = torch.nn.CrossEntropyLoss().to(self.device)
             logging.info('Loss function: {}'.format(self.loss_func.__class__.__name__))

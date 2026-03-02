@@ -21,7 +21,10 @@ class Processor(Initializer):
 
         # Check if using LDL (regression task)
         use_ldl = getattr(self.args, 'use_ldl', False)
-        epoch_mae = [] if use_ldl else None
+        task_mode = getattr(self.args, 'task_mode', None)
+        is_regression = task_mode == 'regression'
+        epoch_mae = [] if (use_ldl or is_regression) else None
+        epoch_mse = [] if (use_ldl or is_regression) else None
 
         for num, batch in enumerate(train_iter):
             self.optimizer.zero_grad()
@@ -49,7 +52,7 @@ class Processor(Initializer):
 
             # Using GPU
             x = x.float().to(self.device)
-            if use_ldl:
+            if use_ldl or is_regression:
                 y = y.float().to(self.device)
             else:
                 y = y.long().to(self.device)   # For classification, y is class indices
@@ -58,7 +61,10 @@ class Processor(Initializer):
             out, _ = self.model(x, gait_params)
 
             # Updating Weights
-            loss = self.loss_func(out, y)
+            if is_regression:
+                loss = self.loss_func(out.squeeze(-1), y)
+            else:
+                loss = self.loss_func(out, y)
             loss.backward()
             self.optimizer.step()
             self.scheduler.step()
@@ -66,7 +72,16 @@ class Processor(Initializer):
 
             # Calculating Metrics
             num_sample += x.size(0)
-            if use_ldl:
+            if is_regression:
+                # Direct regression: compare model output with original label
+                pred_values = out.squeeze(-1)
+                target_values = original_label.float().to(self.device) if original_label is not None else y
+                batch_mae = torch.abs(pred_values - target_values).mean().item()
+                batch_mse = ((pred_values - target_values) ** 2).mean().item()
+                train_metric += torch.abs(pred_values - target_values).sum().item()
+                epoch_mae.append(batch_mae)
+                epoch_mse.append(batch_mse)
+            elif use_ldl:
                 # For LDL, calculate MAE on expectation values vs original labels
                 pred_probs = F.softmax(out, dim=1)
                 pred_expectation = torch.sum(pred_probs * self.bin_centers.to(self.device), dim=1)
@@ -74,13 +89,16 @@ class Processor(Initializer):
                 if original_label is not None:
                     original_label_tensor = original_label.float().to(self.device)
                     batch_mae = torch.abs(pred_expectation - original_label_tensor).mean().item()
+                    batch_mse = ((pred_expectation - original_label_tensor) ** 2).mean().item()
                     train_metric += torch.abs(pred_expectation - original_label_tensor).sum().item()
                 else:
                     # Fallback to target_expectation if original_label not available
                     target_expectation = torch.sum(y * self.bin_centers.to(self.device), dim=1)
                     batch_mae = torch.abs(pred_expectation - target_expectation).mean().item()
+                    batch_mse = ((pred_expectation - target_expectation) ** 2).mean().item()
                     train_metric += torch.abs(pred_expectation - target_expectation).sum().item()
                 epoch_mae.append(batch_mae)
+                epoch_mse.append(batch_mse)
             else:
                 # For classification, calculate accuracy
                 reco_top1 = out.max(1)[1]
@@ -100,7 +118,7 @@ class Processor(Initializer):
                 train_iter.set_description('Loss: {:.4f}, LR: {:.4f}'.format(loss.item(), lr))
 
         # Showing Train Results
-        if use_ldl:
+        if use_ldl or is_regression:
             train_metric /= num_sample  # MAE
             metric_name = 'MAE'
             metric_format = '{:.4f}'
@@ -113,9 +131,11 @@ class Processor(Initializer):
             self.scalar_writer.add_scalar('train_metric', train_metric, self.global_step)
         avg_train_loss = sum(epoch_losses) / len(epoch_losses)
         self.train_losses.append(avg_train_loss)
-        if use_ldl and epoch_mae:
+        if (use_ldl or is_regression) and epoch_mae:
             avg_train_mae = sum(epoch_mae) / len(epoch_mae)
             self.train_mae_values.append(avg_train_mae)
+            avg_train_mse = sum(epoch_mse) / len(epoch_mse)
+            self.train_mse_values.append(avg_train_mse)
         logging.info('Epoch: {}/{}, Training {}: {}, LR: {:.6f}, Training time: {:.2f}s'.format(
             epoch+1, self.max_epoch, metric_name, metric_format.format(train_metric), lr, time()-start_train_time
         ))
@@ -127,8 +147,10 @@ class Processor(Initializer):
         with torch.no_grad():
             # Check if using LDL (regression task)
             use_ldl = getattr(self.args, 'use_ldl', False)
+            task_mode = getattr(self.args, 'task_mode', None)
+            is_regression = task_mode == 'regression'
 
-            if use_ldl:
+            if use_ldl or is_regression:
                 eval_metric = 0  # MAE for regression
                 eval_mse = 0  # MSE for regression
                 metric_name = 'MAE'
@@ -165,7 +187,7 @@ class Processor(Initializer):
 
                 # Using GPU
                 x = x.float().to(self.device)
-                if use_ldl:
+                if use_ldl or is_regression:
                     y = y.float().to(self.device)
                 else:
                     y = y.long().to(self.device)   # For classification, y is class indices
@@ -174,12 +196,27 @@ class Processor(Initializer):
                 out, _ = self.model(x, gait_params)
 
                 # Getting Loss
-                loss = self.loss_func(out, y)
+                if is_regression:
+                    loss = self.loss_func(out.squeeze(-1), y)
+                else:
+                    loss = self.loss_func(out, y)
                 eval_loss.append(loss.item())
 
                 # Calculating Metrics
                 num_sample += x.size(0)
-                if use_ldl:
+                if is_regression:
+                    # Direct regression: compare model output with original label
+                    pred_values = out.squeeze(-1)
+                    target_values = original_label.float().to(self.device) if original_label is not None else y
+                    eval_metric += torch.abs(pred_values - target_values).sum().item()
+                    eval_mse += ((pred_values - target_values) ** 2).sum().item()
+                    all_pred_expectations.extend(pred_values.cpu().numpy().tolist())
+                    all_target_labels.extend(target_values.cpu().numpy().tolist())
+
+                    for i in range(out.size(0)):
+                        true_label = original_label[i].item() if original_label is not None else y[i].item()
+                        print(f"Sample {num * self.eval_batch_size + i}: pred = {pred_values[i].item():.2f}, true = {true_label:.2f}")
+                elif use_ldl:
                     # For LDL, calculate MAE on expectation values vs original labels
                     pred_probs = F.softmax(out, dim=1)
                     pred_expectation = torch.sum(pred_probs * self.bin_centers.to(self.device), dim=1)
@@ -231,10 +268,11 @@ class Processor(Initializer):
         eval_time = time() - start_eval_time
         eval_speed = len(self.eval_loader) * self.eval_batch_size / eval_time / len(self.args.gpus)
 
-        if use_ldl:
+        if use_ldl or is_regression:
             eval_metric /= num_sample  # MAE
             eval_mse /= num_sample  # MSE
             self.val_mae_values.append(eval_metric)
+            self.val_mse_values.append(eval_mse)
             
             # Calculate Spearman and Kendall ranking correlations
             spearman_corr, spearman_p = spearmanr(all_target_labels, all_pred_expectations)
@@ -266,7 +304,7 @@ class Processor(Initializer):
             self.scalar_writer.add_scalar('eval_loss', eval_loss, self.global_step)
 
         torch.cuda.empty_cache()
-        if use_ldl:
+        if use_ldl or is_regression:
             return eval_metric, eval_mse, spearman_corr, None  # Return MAE, MSE, Spearman, cm
         else:
             return acc_top1, acc_top5, cm
@@ -295,9 +333,11 @@ class Processor(Initializer):
             # Resuming
             start_epoch = 0
             use_ldl = getattr(self.args, 'use_ldl', False)
+            task_mode = getattr(self.args, 'task_mode', None)
+            is_regression = task_mode == 'regression'
             # Get best_metric_criterion from config: 'mae', 'mse', or 'spearman'
             best_metric_criterion = getattr(self.args, 'best_metric_criterion', 'mae')
-            if use_ldl:
+            if use_ldl or is_regression:
                 # Initialize best_state with MAE, MSE, and Spearman
                 best_state = {'mae': float('inf'), 'mse': float('inf'), 'spearman': -float('inf'), 'cm': None}
                 best_metric_key = best_metric_criterion  # 'mae', 'mse', or 'spearman'
@@ -324,7 +364,6 @@ class Processor(Initializer):
 
             # Training
             logging.info('Starting training ...')
-            use_ldl = getattr(self.args, 'use_ldl', False)
             for epoch in range(start_epoch, self.max_epoch):
 
                 # Training
@@ -335,7 +374,7 @@ class Processor(Initializer):
                 if (epoch+1) % self.eval_interval(epoch) == 0:
                     logging.info('Evaluating for epoch {}/{} ...'.format(epoch+1, self.max_epoch))
                     eval_mae, eval_mse, eval_spearman, cm = self.eval()
-                    if use_ldl:
+                    if use_ldl or is_regression:
                         # Update best_state with current metrics
                         current_mae = eval_mae
                         current_mse = eval_mse
@@ -377,7 +416,7 @@ class Processor(Initializer):
                     epoch+1, best_state, is_best, self.args.work_dir, self.save_dir, self.model_name,
                     save_interval=save_interval
                 )
-                if use_ldl:
+                if use_ldl or is_regression:
                     if best_metric_criterion == 'spearman':
                         logging.info('Best Spearman: {:.4f} (MAE: {:.4f}, MSE: {:.4f}), Total time: {}'.format(
                             best_state['spearman'], best_state['mae'], best_state['mse'], U.get_time(time()-start_time)
@@ -620,4 +659,21 @@ class Processor(Initializer):
             plt.legend()
             plt.grid(True)
             plt.savefig('{}/mae_curves.png'.format(self.save_dir))
+            plt.close()
+
+        # Plot MSE curves if available
+        if self.train_mse_values or self.val_mse_values:
+            plt.figure(figsize=(10, 6))
+            if self.train_mse_values:
+                train_mse_epochs = range(1, len(self.train_mse_values) + 1)
+                plt.plot(train_mse_epochs, self.train_mse_values, label='Training MSE', color='green')
+            if self.val_mse_values:
+                val_mse_epochs = range(1, len(self.val_mse_values) + 1)
+                plt.plot(val_mse_epochs, self.val_mse_values, label='Validation MSE', color='brown')
+            plt.xlabel('Epoch')
+            plt.ylabel('MSE')
+            plt.title('Training and Validation MSE Curves')
+            plt.legend()
+            plt.grid(True)
+            plt.savefig('{}/mse_curves.png'.format(self.save_dir))
             plt.close()

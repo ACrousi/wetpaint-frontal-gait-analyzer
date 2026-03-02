@@ -3,6 +3,7 @@ import logging
 from . import blocks
 from .nets import ResGCN
 from .mlp import GaitMLP
+from .lstm import GaitLSTM
 from .modules import ResGCN_Module, AttGCN_Module
 from .attentions import *
 
@@ -12,6 +13,7 @@ from .ctrgcn import CTRGCN, CTRGCN_MultiBranch
 __model = {
     'resgcn': ResGCN,
     'gaitmlp': GaitMLP,
+    'lstm': GaitLSTM,
     'ctrgcn': CTRGCN,
     'ctrgcn-mb': CTRGCN_MultiBranch,
 }
@@ -69,6 +71,9 @@ def create(model_type, **kwargs):
         if 'input_dim' not in kwargs or 'num_class' not in kwargs:
             logging.error('Error: gaitmlp requires input_dim and num_class in kwargs!')
             raise ValueError()
+        return __model[model](**kwargs)
+    elif model == 'lstm':
+        # For LSTM, pass data_shape, num_class, and model_args
         return __model[model](**kwargs)
     elif model == 'ctrgcn':
         if 'data_shape' in kwargs:

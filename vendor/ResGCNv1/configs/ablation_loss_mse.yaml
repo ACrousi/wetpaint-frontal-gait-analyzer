@@ -1,0 +1,63 @@
+# ====================================
+# 消融實驗: Loss Function = MSE（對比 ordinal）
+# ====================================
+workspace_root: "../../outputs"
+
+config: resgcn_coco
+dataset: coco
+gpus: [0]
+seed: 1
+work_dir: 'ablation_loss_mse/'
+no_progress_bar: False
+
+dataset_args:
+  coco:
+    input_path: json
+    path: ""
+    use_gait: false
+    train_batch_size: 16
+    eval_batch_size: 16
+    seed: 42
+    metadata_path: json/analysis_metadata.csv
+    data_path: coco/train_data.npy
+    label_path: coco/train_label.pkl
+    eval_data_path: coco/eval_data.npy
+    eval_label_path: coco/eval_label.pkl
+    use_ldl: true
+    ldl_config:
+      type: gaussian
+      sigma: 1.0
+      exact_iterations: 10
+    custom_bin_centers: [12, 16, 20, 24, 28, 32, 36]
+    num_class: 7
+    ldl_min_label: 12
+    ldl_max_label: 36
+
+model_type: pa-resgcn-b15-r2
+model_args:
+  gait_dim: null
+  kernel_size: [5,2]
+  drop_edge_prob: 0.1
+  drop_path_prob: 0.0
+
+optimizer: SGD
+optimizer_args:
+  SGD:
+    lr: 0.01
+    momentum: 0.9
+    nesterov: true
+    weight_decay: 0.001
+
+lr_scheduler: cosine
+scheduler_args:
+  cosine:
+    max_epoch: 200
+    warm_up: 10
+    eta_min: 1e-6
+
+# === 消融變量: 改用 MSE loss (ExpectationLoss) ===
+use_ldl: true
+loss_type: mse
+early_stop_patience: 200
+save_interval: 30
+best_metric_criterion: spearman

@@ -1,9 +1,9 @@
 # ====================================
 # 工作目錄配置
 # ====================================
-# 所有輸出路徑的根目錄（相對於 ResGCN 目錄）
+# 所有輸出路徑的根目錄（相對於 ResGCN/configs 目錄）
 # 環境變數 RESGCN_WORKSPACE 可覆蓋此設定
-workspace_root: "../../outputs"
+workspace_root: "../../../outputs"
 
 config: resgcn_coco
 dataset: coco
@@ -40,9 +40,9 @@ dataset_args:
     # num_class: 14  # 14 個類別
     # custom_bin_centers: [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]
     # num_class: 24  # 24 個類別
-    custom_bin_centers: [12, 16, 20, 24, 28, 32, 36]
-    num_class: 7  # 7 個類別
-    ldl_min_label: 12  # 最小月齡
+    custom_bin_centers: [9, 12, 15, 18, 21, 24, 27, 30, 33, 36]
+    num_class: 10  # 10 個類別
+    ldl_min_label: 9  # 最小月齡
     ldl_max_label: 36  # 最大月齡
 
 model_type: pa-resgcn-b15-r2
