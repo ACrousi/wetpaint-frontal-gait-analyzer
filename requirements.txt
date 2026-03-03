@@ -14,6 +14,7 @@ pillow
 h5py
 matplotlib
 pyyaml
+umap-learn
 
 # ----------------------------------------------------------
 # API Server
