@@ -6,6 +6,7 @@ Generates publication-quality figures from extract() output (.npz files):
 2. Bland-Altman plot: agreement analysis
 3. Age-group error boxplot: per-group MAE distribution
 4. LDL distribution visualization: predicted vs target distributions
+5. UMAP feature embedding: FC-layer features colored by age
 
 Usage:
     python scripts/paper_visualizations.py --npz <path_to_npz> --output_dir <output_dir>
@@ -315,13 +316,89 @@ def print_summary(npz_path):
     print('=' * 50 + '\n')
 
 
+# ========== 6. UMAP Feature Embedding ==========
+def plot_umap(npz_path, output_dir, figsize=(8, 7)):
+    """UMAP visualization of FC-layer-preceding features colored by true age.
+    
+    The 'feature' key in the npz file contains the 256-dim feature vector
+    from global pooling output, before dropout and FC layer.
+    """
+    try:
+        import umap
+    except ImportError:
+        print('ERROR: umap-learn not installed. Run: pip install umap-learn')
+        return
+
+    data = load_data(npz_path)
+    features = data['feature']            # (N, feature_dim), e.g., (51, 256)
+    true_ages = data['target_expectations']
+    pred_ages = data['pred_expectations']
+
+    # Flatten features if needed (e.g., if shape is (N, dim, 1, ...))
+    if features.ndim > 2:
+        features = features.reshape(features.shape[0], -1)
+
+    print(f'  Feature shape: {features.shape}')
+    print(f'  Running UMAP reduction...')
+
+    # UMAP reduction to 2D
+    n_neighbors = min(15, len(features) - 1)
+    reducer = umap.UMAP(
+        n_neighbors=n_neighbors,
+        min_dist=0.3,
+        n_components=2,
+        metric='euclidean',
+        random_state=42
+    )
+    embedding = reducer.fit_transform(features)
+
+    # --- Plot 1: colored by TRUE age ---
+    fig, ax = plt.subplots(figsize=figsize)
+    scatter = ax.scatter(
+        embedding[:, 0], embedding[:, 1],
+        c=true_ages, cmap='RdYlBu_r', s=60,
+        edgecolors='white', linewidth=0.5, alpha=0.85
+    )
+    cbar = plt.colorbar(scatter, ax=ax, shrink=0.8)
+    cbar.set_label('True Age (months)', fontsize=12)
+    ax.set_xlabel('UMAP-1')
+    ax.set_ylabel('UMAP-2')
+    ax.set_title('UMAP Feature Embedding (colored by True Age)')
+    ax.grid(True, alpha=0.2)
+
+    save_path = os.path.join(output_dir, 'umap_true_age.png')
+    fig.savefig(save_path)
+    plt.close(fig)
+    print(f'Saved UMAP (true age): {save_path}')
+
+    # --- Plot 2: colored by PREDICTION ERROR ---
+    abs_errors = np.abs(pred_ages - true_ages)
+    fig, ax = plt.subplots(figsize=figsize)
+    scatter = ax.scatter(
+        embedding[:, 0], embedding[:, 1],
+        c=abs_errors, cmap='YlOrRd', s=60,
+        edgecolors='white', linewidth=0.5, alpha=0.85
+    )
+    cbar = plt.colorbar(scatter, ax=ax, shrink=0.8)
+    cbar.set_label('|Prediction Error| (months)', fontsize=12)
+    ax.set_xlabel('UMAP-1')
+    ax.set_ylabel('UMAP-2')
+    ax.set_title('UMAP Feature Embedding (colored by Prediction Error)')
+    ax.grid(True, alpha=0.2)
+
+    save_path = os.path.join(output_dir, 'umap_pred_error.png')
+    fig.savefig(save_path)
+    plt.close(fig)
+    print(f'Saved UMAP (prediction error): {save_path}')
+
+
 # ========== CLI Entry Point ==========
 def main():
     parser = argparse.ArgumentParser(description='Generate paper visualizations from extract() output')
     parser.add_argument('--npz', type=str, required=True, help='Path to extraction .npz file')
     parser.add_argument('--output_dir', type=str, default='paper_figures/', help='Output directory for figures')
     parser.add_argument('--plots', type=str, nargs='+',
-                        default=['scatter', 'bland_altman', 'age_group', 'ldl', 'summary'],
+                        default=['scatter', 'bland_altman', 'age_group', 'ldl', 'umap', 'summary'],
                         help='Which plots to generate')
     parser.add_argument('--samples', type=int, nargs='+', default=None,
                         help='Sample indices for LDL distribution plot')
@@ -334,6 +411,7 @@ def main():
         'bland_altman': lambda: plot_bland_altman(args.npz, args.output_dir),
         'age_group': lambda: plot_age_group_error(args.npz, args.output_dir),
         'ldl': lambda: plot_ldl_distribution(args.npz, args.output_dir, sample_indices=args.samples),
+        'umap': lambda: plot_umap(args.npz, args.output_dir),
         'summary': lambda: print_summary(args.npz),
     }
 
