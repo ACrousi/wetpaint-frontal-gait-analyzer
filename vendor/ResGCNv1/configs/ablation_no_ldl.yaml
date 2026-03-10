@@ -1,7 +1,7 @@
 # ====================================
 # 消融實驗: 直接回歸（無 LDL），對比 LDL 的有效性
 # ====================================
-workspace_root: "../../outputs"
+workspace_root: "../../../outputs"
 
 config: resgcn_coco
 dataset: coco

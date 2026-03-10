@@ -455,8 +455,10 @@ class Processor(Initializer):
             logging.warning('Warning: Using debug setting now!')
             logging.info('')
 
-        # Check if using LDL
+        # Check if using LDL or regression
         use_ldl = getattr(self.args, 'use_ldl', False)
+        task_mode = getattr(self.args, 'task_mode', None)
+        is_regression = task_mode == 'regression'
 
         # Loading Model
         logging.info('Loading evaluating model ...')
@@ -470,7 +472,7 @@ class Processor(Initializer):
         all_data, all_labels, all_names, all_out, all_features = [], [], [], [], []
         all_locations = []
         all_class_labels = []
-        if use_ldl:
+        if use_ldl or is_regression:
             all_pred_expectations = []
             all_target_expectations = []
 
@@ -499,7 +501,7 @@ class Processor(Initializer):
 
                 # Using GPU
                 x = x.float().to(self.device)
-                if use_ldl:
+                if use_ldl or is_regression:
                     y = y.float().to(self.device)
                 else:
                     y = y.long().to(self.device)
@@ -510,11 +512,21 @@ class Processor(Initializer):
                 # Processing Data
                 data = x.detach().cpu().numpy()
                 label = y.detach().cpu().numpy()
-                out_processed = torch.nn.functional.softmax(out, dim=1).detach().cpu().numpy()
+                if is_regression:
+                    out_processed = out.detach().cpu().numpy()
+                else:
+                    out_processed = torch.nn.functional.softmax(out, dim=1).detach().cpu().numpy()
                 feature_processed = feature.detach().cpu().numpy()
 
-                # Get class labels
-                if use_ldl:
+                # Get class labels and expectations
+                if is_regression:
+                    class_label = label
+                    # Direct regression: pred = model output, target = original label
+                    pred_expectation = out.squeeze(-1).detach().cpu().numpy()
+                    target_expectation = original_label.cpu().numpy() if original_label is not None else label
+                    all_pred_expectations.append(pred_expectation)
+                    all_target_expectations.append(target_expectation)
+                elif use_ldl:
                     class_label = np.argmax(label, axis=1)
                     # Calculate expectations
                     pred_probs = torch.nn.functional.softmax(out, dim=1)
@@ -552,7 +564,7 @@ class Processor(Initializer):
         all_out = np.concatenate(all_out, axis=0)
         all_features = np.concatenate(all_features, axis=0)
         all_class_labels = np.concatenate(all_class_labels, axis=0)
-        if use_ldl:
+        if use_ldl or is_regression:
             all_pred_expectations = np.concatenate(all_pred_expectations, axis=0)
             all_target_expectations = np.concatenate(all_target_expectations, axis=0)
         if all_locations:
@@ -575,10 +587,11 @@ class Processor(Initializer):
                 'data': all_data, 'label': all_labels, 'name': all_names, 'out': all_out, 'cm': cm,
                 'feature': all_features, 'weight': weight, 'location': all_locations, 'class_label': all_class_labels
             }
-            if use_ldl:
-                save_dict['bin_centers'] = self.bin_centers.cpu().numpy()
+            if use_ldl or is_regression:
                 save_dict['pred_expectations'] = all_pred_expectations
                 save_dict['target_expectations'] = all_target_expectations
+            if use_ldl:
+                save_dict['bin_centers'] = self.bin_centers.cpu().numpy()
             save_path = os.path.join(vis_dir, 'extraction_{}.npz'.format(config_name))
             np.savez(save_path, **save_dict)
             logging.info('Saved extraction to: {}'.format(save_path))

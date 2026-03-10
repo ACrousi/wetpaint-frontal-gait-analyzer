@@ -153,69 +153,86 @@ def plot_bland_altman(npz_path, output_dir, figsize=(8, 6)):
 
 
 # ========== 3. Age-Group Error Boxplot ==========
-def plot_age_group_error(npz_path, output_dir, groups=None, figsize=(9, 6)):
-    """Per-age-group MAE boxplot.
-    
-    Args:
-        groups: list of (min, max) tuples for age groups.
-                Default: [(12,16), (16,20), (20,24), (24,28), (28,32), (32,36)]
-    """
-    data = load_data(npz_path)
-    pred = data['pred_expectations']
-    true = data['target_expectations']
-
-    if groups is None:
-        groups = [(12, 16), (16, 20), (20, 24), (24, 28), (28, 32), (32, 36)]
-
+def _draw_age_group_boxplot(ax, true, pred, groups, title_suffix=''):
+    """Helper: draw a single age-group error boxplot on the given axes."""
     errors_per_group = []
     labels = []
     counts = []
 
     for g_min, g_max in groups:
-        mask = (true >= g_min) & (true < g_max)
+        if g_max is None:
+            mask = (true >= g_min)
+        else:
+            mask = (true >= g_min) & (true < g_max)
         if mask.sum() == 0:
             continue
         group_errors = np.abs(pred[mask] - true[mask])
         errors_per_group.append(group_errors)
-        labels.append(f'{g_min}-{g_max}')
+        label = f'{g_min}-{g_max}' if g_max is not None else f'{g_min}+'
+        labels.append(label)
         counts.append(mask.sum())
 
-    fig, ax = plt.subplots(figsize=figsize)
+    if not errors_per_group:
+        return
 
-    bp = ax.boxplot(errors_per_group, patch_artist=True, labels=labels,
+    bp = ax.boxplot(errors_per_group, patch_artist=True, tick_labels=labels,
                     medianprops=dict(color='red', linewidth=1.5),
                     whiskerprops=dict(linewidth=1),
                     boxprops=dict(linewidth=1))
 
-    # Color boxes with a gradient
     colors = plt.cm.Blues(np.linspace(0.3, 0.8, len(errors_per_group)))
     for patch, color in zip(bp['boxes'], colors):
         patch.set_facecolor(color)
 
-    # Add sample count annotations
+    # Sample count annotations
     for i, (count, label) in enumerate(zip(counts, labels)):
         ax.text(i + 1, ax.get_ylim()[1] * 0.92, f'n={count}',
                 ha='center', va='top', fontsize=9, color='gray')
 
-    # Add mean MAE per group as markers
+    # Mean MAE markers
     for i, errs in enumerate(errors_per_group):
         ax.scatter(i + 1, np.mean(errs), marker='D', color='darkred', s=30, zorder=5)
 
     ax.set_xlabel('Age Group (months)')
     ax.set_ylabel('Absolute Error (months)')
-    ax.set_title('Prediction Error by Age Group')
+    ax.set_title(f'Prediction Error by Age Group{title_suffix}')
     ax.grid(True, alpha=0.3, axis='y')
 
-    # Add overall MAE annotation
     overall_mae = np.mean(np.abs(pred - true))
     ax.axhline(y=overall_mae, color='orange', linestyle='--', linewidth=1,
                label=f'Overall MAE = {overall_mae:.2f}', alpha=0.7)
     ax.legend(loc='upper left')
 
-    save_path = os.path.join(output_dir, 'age_group_error.png')
-    fig.savefig(save_path)
-    plt.close(fig)
-    print(f'Saved age-group error plot: {save_path}')
+
+def plot_age_group_error(npz_path, output_dir, figsize=(9, 6)):
+    """Generate two age-group error boxplots:
+    1. Uniform 3-month intervals: 12-15, 15-18, ..., 27-30 (30+ capped to 30)
+    2. Developmental stages: 12-15, 15-18, 18-24, 24-30
+    """
+    data = load_data(npz_path)
+    pred = data['pred_expectations']
+    true = data['target_expectations'].copy()
+
+    # Cap 30+ to 30 for grouping
+    true_capped = np.clip(true, None, 30)
+
+    # --- Plot 1: uniform 3-month intervals ---
+    groups_uniform = [(12, 15), (15, 18), (18, 21), (21, 24), (24, 27), (27, 30)]
+    fig1, ax1 = plt.subplots(figsize=figsize)
+    _draw_age_group_boxplot(ax1, true_capped, pred, groups_uniform, ' (3-month intervals)')
+    save_path1 = os.path.join(output_dir, 'age_group_error_uniform.png')
+    fig1.savefig(save_path1)
+    plt.close(fig1)
+    print(f'Saved age-group error plot (uniform): {save_path1}')
+
+    # --- Plot 2: developmental stages ---
+    groups_dev = [(12, 15), (15, 18), (18, 24), (24, 30)]
+    fig2, ax2 = plt.subplots(figsize=figsize)
+    _draw_age_group_boxplot(ax2, true_capped, pred, groups_dev, ' (developmental stages)')
+    save_path2 = os.path.join(output_dir, 'age_group_error_developmental.png')
+    fig2.savefig(save_path2)
+    plt.close(fig2)
+    print(f'Saved age-group error plot (developmental): {save_path2}')
 
 
 # ========== 4. LDL Distribution Visualization ==========
@@ -227,6 +244,12 @@ def plot_ldl_distribution(npz_path, output_dir, sample_indices=None, figsize=(12
                         (one good, one medium, one poor prediction).
     """
     data = load_data(npz_path)
+    
+    # Skip if no bin_centers (regression mode, no LDL)
+    if 'bin_centers' not in data:
+        print('  Skipping LDL distribution plot: no bin_centers (regression mode)')
+        return
+    
     pred_out = data['out']              # softmax output: (N, num_class)
     target_dist = data['label']         # target distribution: (N, num_class)
     bin_centers = data['bin_centers']    # bin centers: (num_class,)

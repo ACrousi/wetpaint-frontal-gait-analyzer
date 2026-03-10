@@ -14,12 +14,13 @@ from .data_utils import multi_input
 class SkeletonTransform:
     """Skeleton data transformation pipeline
     
-    Transforms raw skeleton data (C, T, V, M) to model input format (3, 6, T, V, M).
+    Transforms raw skeleton data (C, T, V, M) to model input format (4, 6, T, V, M).
     Ensures identical processing for training, evaluation, and inference.
     
     Processing steps:
     1. Mask eye/ear joints (indices 1,2,3,4 in COCO format)
-    2. Apply multi_input to generate 3-branch, 6-channel format
+    2. Apply multi_input to generate 4-branch, 6-channel format
+       (joint, velocity, bone, acceleration)
     3. Optional augmentation (training only)
     """
     
@@ -47,7 +48,7 @@ class SkeletonTransform:
                   C=3 (x, y, score), T=frames, V=joints, M=persons
         
         Returns:
-            Transformed data with shape (3, 6, T, V, M)
+            Transformed data with shape (4, 6, T, V, M)
         """
         # 1. Mask eye/ear joints
         data = data.copy()

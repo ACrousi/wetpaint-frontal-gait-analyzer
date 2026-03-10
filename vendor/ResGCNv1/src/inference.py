@@ -111,10 +111,10 @@ class ResGCNInference:
             # 1. JSON → Tensor (C, T, V, M)
             skeleton_data = self.converter.json_to_tensor(json_path)
             
-            # 2. Transform (joint masking + multi_input) → (3, 6, T, V, M)
+            # 2. Transform (joint masking + multi_input) → (4, 6, T, V, M)
             data_numpy = self.skeleton_transform(skeleton_data)
             
-            # 3. To device: (1, 3, 6, T, V, M)
+            # 3. To device: (1, 4, 6, T, V, M)
             x = torch.tensor(data_numpy, dtype=torch.float32).unsqueeze(0).to(self.device)
             
             # 4. Inference
