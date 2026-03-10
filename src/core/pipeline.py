@@ -357,7 +357,7 @@ class SegmentExportStage(PipelineStage):
                         track_id=track_id,
                         start_frame=start_frame,
                         end_frame=end_frame,
-                        use_normalized_keypoints=True,
+                        use_normalized_keypoints=False,
                         output_format="soa"
                     )
                     
