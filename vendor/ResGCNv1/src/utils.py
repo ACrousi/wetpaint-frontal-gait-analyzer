@@ -32,49 +32,96 @@ def get_current_timestamp():
     return '[ {},{:0>3d} ] '.format(strftime('%Y-%m-%d %H:%M:%S', localtime(ct)), ms)
 
 
-def load_checkpoint(work_dir, model_name='resume'):
+def load_checkpoint(work_dir, model_name='resume', fold_idx=-1):
     if model_name == 'resume':
         file_name = '{}/checkpoint.pth.tar'.format(work_dir)
     elif model_name == 'debug':
         file_name = '{}/temp/debug.pth.tar'.format(work_dir)
     else:
-        dirs, accs = {}, {}
-        work_dir = '{}/{}'.format(work_dir, model_name)
-        if os.path.exists(work_dir):
-            for i, dir_time in enumerate(os.listdir(work_dir)):
-                if os.path.isdir('{}/{}'.format(work_dir, dir_time)):
-                    state_file = '{}/{}/reco_results.json'.format(work_dir, dir_time)
-                    if os.path.exists(state_file):
-                        with open(state_file, 'r') as f:
-                            best_state = json.load(f)
-                        # 對於回歸任務，使用 'mae'；對於分類任務，使用 'acc_top1'
-                        accs[str(i+1)] = best_state.get('mae', best_state.get('acc_top1', 0))
-                        dirs[str(i+1)] = dir_time
-        if len(dirs) == 0:
-            logging.warning('Warning: Do NOT exists any model in workdir!')
-            logging.info('Evaluating initial or pretrained model.')
-            return None
-        logging.info('Please choose the evaluating model from the following models.')
-        logging.info('Default is the initial or pretrained model.')
-        for key in dirs.keys():
-            # 對於回歸任務，顯示 MAE；對於分類任務，顯示準確率
+        dirs, accs, labels = {}, {}, {}
+        model_dir = '{}/{}'.format(work_dir, model_name)
+
+        if fold_idx >= 0:
+            # ====== K-Fold 模式：自動載入含有指定 fold_idx 的最新模型 ======
+            if os.path.exists(model_dir):
+                for dir_time in sorted(os.listdir(model_dir)):
+                    full_path = os.path.join(model_dir, dir_time)
+                    if os.path.isdir(full_path):
+                        # 檢查 fold_results.json 是否匹配
+                        fold_file = os.path.join(full_path, 'fold_results.json')
+                        if os.path.exists(fold_file):
+                            with open(fold_file, 'r') as f:
+                                fold_info = json.load(f)
+                            if fold_info.get('fold_idx') == fold_idx:
+                                state_file = os.path.join(full_path, 'reco_results.json')
+                                if os.path.exists(state_file):
+                                    with open(state_file, 'r') as f:
+                                        best_state = json.load(f)
+                                    key = str(len(dirs) + 1)
+                                    accs[key] = best_state.get('mae', best_state.get('acc_top1', 0))
+                                    dirs[key] = dir_time
+                                    labels[key] = '[fold {}] {}'.format(fold_idx, dir_time)
+
+            if len(dirs) == 0:
+                logging.warning('Warning: No model found for fold {}!'.format(fold_idx))
+                return None
+
+            # 自動選擇最新的模型（sorted by timestamp，取最後一個）
+            latest_key = max(dirs.keys(), key=lambda k: int(k))
+            logging.info('K-Fold mode: auto-loading latest model for fold {}'.format(fold_idx))
             metric_name = 'MAE' if 'mae' in best_state else 'accuracy'
             metric_format = '{:.4f}' if 'mae' in best_state else '{:.2%}'
-            logging.info('({}) {}: {} | training time: {}'.format(key, metric_name, metric_format.format(accs[key]), dirs[key]))
-        logging.info('Your choice (number of the model, q for quit): ')
-        while True:
-            idx = input(get_current_timestamp())
-            if idx == '':
+            logging.info('  -> {}: {} | {}'.format(metric_name, metric_format.format(accs[latest_key]), labels[latest_key]))
+            file_name = '{}/{}/{}.pth.tar'.format(model_dir, dirs[latest_key], model_name)
+
+        else:
+            # ====== 一般模式：列出所有模型供手動選擇 ======
+            if os.path.exists(model_dir):
+                for dir_time in sorted(os.listdir(model_dir)):
+                    entry_path = os.path.join(model_dir, dir_time)
+                    if os.path.isdir(entry_path):
+                        state_file = os.path.join(entry_path, 'reco_results.json')
+                        if os.path.exists(state_file):
+                            with open(state_file, 'r') as f:
+                                best_state = json.load(f)
+                            key = str(len(dirs) + 1)
+                            accs[key] = best_state.get('mae', best_state.get('acc_top1', 0))
+                            dirs[key] = dir_time
+                            # 如果有 fold_results.json，加上 fold 標籤
+                            fold_file = os.path.join(entry_path, 'fold_results.json')
+                            if os.path.exists(fold_file):
+                                with open(fold_file, 'r') as f:
+                                    fold_info = json.load(f)
+                                labels[key] = '[fold {}] {}'.format(fold_info.get('fold_idx', '?'), dir_time)
+                            else:
+                                labels[key] = dir_time
+
+            if len(dirs) == 0:
+                logging.warning('Warning: Do NOT exists any model in workdir!')
                 logging.info('Evaluating initial or pretrained model.')
                 return None
-            elif idx in dirs.keys():
-                break
-            elif idx == 'q':
-                logging.info('Quit!')
-                sys.exit(1)
-            else:
-                logging.info('Wrong choice!')
-        file_name = '{}/{}/{}.pth.tar'.format(work_dir, dirs[idx], model_name)
+
+            logging.info('Please choose the evaluating model from the following models.')
+            logging.info('Default is the initial or pretrained model.')
+            for key in dirs.keys():
+                metric_name = 'MAE' if 'mae' in best_state else 'accuracy'
+                metric_format = '{:.4f}' if 'mae' in best_state else '{:.2%}'
+                logging.info('({}) {}: {} | {}'.format(key, metric_name, metric_format.format(accs[key]), labels[key]))
+            logging.info('Your choice (number of the model, q for quit): ')
+            while True:
+                idx = input(get_current_timestamp())
+                if idx == '':
+                    logging.info('Evaluating initial or pretrained model.')
+                    return None
+                elif idx in dirs.keys():
+                    break
+                elif idx == 'q':
+                    logging.info('Quit!')
+                    sys.exit(1)
+                else:
+                    logging.info('Wrong choice!')
+            file_name = '{}/{}/{}.pth.tar'.format(model_dir, dirs[idx], model_name)
+
     if os.path.exists(file_name):
         return torch.load(file_name, map_location=torch.device('cpu'), weights_only=False)
     else:

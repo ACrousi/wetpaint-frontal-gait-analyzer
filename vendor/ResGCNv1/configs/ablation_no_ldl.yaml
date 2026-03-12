@@ -46,7 +46,7 @@ optimizer_args:
 lr_scheduler: cosine
 scheduler_args:
   cosine:
-    max_epoch: 200
+    max_epoch: 120
     warm_up: 10
     eta_min: 1e-6
 
@@ -54,6 +54,6 @@ scheduler_args:
 use_ldl: false
 task_mode: regression
 loss_type: mse
-early_stop_patience: 200
+early_stop_patience: 120
 save_interval: 30
 best_metric_criterion: mae

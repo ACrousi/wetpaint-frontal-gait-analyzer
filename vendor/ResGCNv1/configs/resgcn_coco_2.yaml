@@ -19,7 +19,7 @@ dataset_args:
     use_gait: false  # 不使用步態參數
     train_batch_size: 16
     eval_batch_size: 16
-    seed: 42
+    seed: 47
     metadata_path: json/analysis_metadata.csv
     # 數據文件路徑（由Generator生成）
     data_path: coco/train_data.npy

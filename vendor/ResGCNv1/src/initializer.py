@@ -135,6 +135,12 @@ class Initializer():
         dataset_args = self.args.dataset_args[dataset_name]
         self.train_batch_size = dataset_args['train_batch_size']
         self.eval_batch_size = dataset_args['eval_batch_size']
+
+        # 傳遞 fold_idx 到 dataset.create（用於 K-Fold CV）
+        fold_idx = getattr(self.args, 'fold_idx', -1)
+        if fold_idx >= 0:
+            dataset_args['fold_idx'] = fold_idx
+
         self.feeders, self.data_shape, self.num_class, self.A, self.parts = dataset.create(
             self.args.debug, self.args.dataset, **dataset_args
         )

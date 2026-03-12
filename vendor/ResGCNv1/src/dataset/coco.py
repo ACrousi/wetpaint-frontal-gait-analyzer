@@ -90,7 +90,8 @@ class Feeder(Dataset):
                  data_path=None, label_path=None, eval_data_path=None, eval_label_path=None,
                  gait_path=None, use_gait=False, model_type='resgcn', is_regression=False,
                  use_ldl=False, ldl_config=None, num_class=1, ldl_min_label=None,
-                 ldl_max_label=None, custom_bin_centers=None, augmentation=None, **kwargs):
+                 ldl_max_label=None, custom_bin_centers=None, augmentation=None,
+                 fold_idx=-1, **kwargs):
         self.split = phase
         self.conn = connect_joint if connect_joint is not None else []
         self.use_gait = use_gait
@@ -115,16 +116,38 @@ class Feeder(Dataset):
             augmentor=augmentor
         )
 
+        # K-Fold: 如果指定了 fold_idx，調整數據路徑到 fold_N/ 子目錄
+        fold_prefix = f"fold_{fold_idx}/" if fold_idx >= 0 else ""
+
         if phase == 'train':
-            self.data_path = data_path or f"{path}/train_data.npy"
-            self.label_path = label_path or f"{path}/train_label.pkl"
-            self.gait_path = gait_path or f"{path}/train_gait.npy" if use_gait else None
+            if fold_idx >= 0 and data_path:
+                # K-Fold mode: 替換路徑中的文件名，加上 fold 前綴
+                import os
+                base_dir = os.path.dirname(data_path)
+                self.data_path = os.path.join(base_dir, fold_prefix, "train_data.npy")
+                self.label_path = os.path.join(base_dir, fold_prefix, "train_label.pkl")
+                self.gait_path = os.path.join(base_dir, fold_prefix, "train_gait.npy") if use_gait else None
+            else:
+                self.data_path = data_path or f"{path}/train_data.npy"
+                self.label_path = label_path or f"{path}/train_label.pkl"
+                self.gait_path = gait_path or f"{path}/train_gait.npy" if use_gait else None
         elif phase == 'eval':
-            self.data_path = eval_data_path or f"{path}/val_data.npy"
-            self.label_path = eval_label_path or f"{path}/val_label.pkl"
-            self.gait_path = gait_path or f"{path}/val_gait.npy" if use_gait else None
+            if fold_idx >= 0 and eval_data_path:
+                # K-Fold mode
+                import os
+                base_dir = os.path.dirname(eval_data_path)
+                self.data_path = os.path.join(base_dir, fold_prefix, "eval_data.npy")
+                self.label_path = os.path.join(base_dir, fold_prefix, "eval_label.pkl")
+                self.gait_path = os.path.join(base_dir, fold_prefix, "eval_gait.npy") if use_gait else None
+            else:
+                self.data_path = eval_data_path or f"{path}/val_data.npy"
+                self.label_path = eval_label_path or f"{path}/val_label.pkl"
+                self.gait_path = gait_path or f"{path}/val_gait.npy" if use_gait else None
         else:
             raise ValueError(f"Invalid phase: {phase}")
+
+        if fold_idx >= 0:
+            logger.info(f"K-Fold mode: fold_idx={fold_idx}, data_path={self.data_path}")
 
         self.load_data()
 

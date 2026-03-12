@@ -448,6 +448,90 @@ class Processor(Initializer):
                         logging.info('Early stopping trigger!')
                         break
 
+            # ====== K-Fold: 訓練結束後保存 fold 結果（用於論文報告） ======
+            fold_idx = getattr(self.args, 'fold_idx', -1)
+            if fold_idx >= 0 and (use_ldl or is_regression):
+                import json, os
+
+                # 保存 best metrics
+                fold_results = {
+                    'fold_idx': fold_idx,
+                    'best_mae': best_state.get('mae', None),
+                    'best_mse': best_state.get('mse', None),
+                    'best_spearman': best_state.get('spearman', None),
+                    'best_metric_criterion': best_metric_criterion,
+                    'total_epochs': epoch + 1,
+                }
+                results_path = os.path.join(self.save_dir, 'fold_results.json')
+                with open(results_path, 'w', encoding='utf-8') as f:
+                    json.dump(fold_results, f, ensure_ascii=False, indent=2)
+                logging.info(f'Fold {fold_idx} results saved to: {results_path}')
+
+                # 載入 best model 並執行最終 eval，保存每個 sample 的預測值
+                logging.info(f'Loading best model for fold {fold_idx} final predictions ...')
+                # 直接從 save_dir 載入（本次訓練剛存好的 best model）
+                best_model_path = os.path.join(self.save_dir, f'{self.model_name}.pth.tar')
+                if os.path.exists(best_model_path):
+                    checkpoint = torch.load(best_model_path, map_location=torch.device('cpu'), weights_only=False)
+                    self.model.module.load_state_dict(checkpoint['model'])
+                    self.model.eval()
+                    all_preds, all_targets, all_names = [], [], []
+                    with torch.no_grad():
+                        for batch in self.eval_loader:
+                            x, y, *rest = batch
+                            original_label = None
+                            gait_params = None
+                            names = None
+                            if len(rest) == 3:
+                                original_label, gait_params, names = rest
+                            elif len(rest) == 2:
+                                if isinstance(rest[1], torch.Tensor):
+                                    original_label, gait_params = rest
+                                else:
+                                    original_label, names = rest
+                            elif len(rest) == 1:
+                                original_label = rest[0]
+
+                            if gait_params is not None:
+                                gait_params = gait_params.float().to(self.device)
+                            x = x.float().to(self.device)
+                            out, _ = self.model(x, gait_params)
+
+                            if is_regression:
+                                pred_values = out.squeeze(-1).cpu().numpy().tolist()
+                                target_values = (original_label.numpy().tolist()
+                                                 if original_label is not None
+                                                 else y.numpy().tolist())
+                            else:
+                                # LDL: compute expectation
+                                pred_probs = torch.nn.functional.softmax(out, dim=1)
+                                pred_values = torch.sum(
+                                    pred_probs * self.bin_centers.to(self.device), dim=1
+                                ).cpu().numpy().tolist()
+                                target_values = (original_label.numpy().tolist()
+                                                 if original_label is not None
+                                                 else torch.sum(
+                                                     y.float().to(self.device) * self.bin_centers.to(self.device), dim=1
+                                                 ).cpu().numpy().tolist())
+
+                            all_preds.extend(pred_values)
+                            all_targets.extend(target_values)
+                            if names is not None:
+                                all_names.extend(names)
+
+                    # 保存每個 sample 的預測值（用於論文畫圖）
+                    predictions = {
+                        'fold_idx': fold_idx,
+                        'predictions': all_preds,
+                        'targets': all_targets,
+                        'sample_names': all_names if all_names else None,
+                    }
+                    pred_path = os.path.join(self.save_dir, 'fold_predictions.json')
+                    with open(pred_path, 'w', encoding='utf-8') as f:
+                        json.dump(predictions, f, ensure_ascii=False, indent=2)
+                    logging.info(f'Fold {fold_idx} predictions ({len(all_preds)} samples) saved to: {pred_path}')
+                else:
+                    logging.warning(f'Best model not found at {best_model_path}, skipping fold predictions.')
 
     def extract(self):
         logging.info('Starting extracting ...')

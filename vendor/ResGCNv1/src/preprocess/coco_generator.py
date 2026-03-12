@@ -29,6 +29,9 @@ class COCO_Generator():
         # Seed for shuffling case_ids
         self.seed = dataset_args.get('seed', 0)
 
+        # K-Fold 參數
+        self.n_folds = getattr(args, 'n_folds', 1)
+
         # 輸出路徑
         self.out_path = '{}/coco'.format(dataset_args['path'])
         U.create_folder(self.out_path)
@@ -43,7 +46,7 @@ class COCO_Generator():
         logging.info(f"Found {len(self.file_list)} unique keypoint files")
 
     def start(self):
-        """生成三組資料：retard, train, eval"""
+        """生成資料：支援一般 train/eval 或 K-Fold 模式"""
         # 分離 retard 和 normal 資料
         if 'development_result' in self.metadata_df.columns:
             retard_df = self.metadata_df[self.metadata_df['development_result'] != 0]
@@ -63,7 +66,10 @@ class COCO_Generator():
 
         # 生成 train/eval 資料（從 normal_df）
         if len(normal_df) > 0:
-            self.gendata_train_eval(normal_df)
+            if self.n_folds > 1:
+                self.gendata_kfold(normal_df, n_folds=self.n_folds)
+            else:
+                self.gendata_train_eval(normal_df)
         else:
             logging.warning("無 normal 資料，無法生成 train/eval")
 
@@ -137,6 +143,88 @@ class COCO_Generator():
         logging.info(f'Phase: eval ({len(eval_files)} samples)')
         self._generate_by_model_type('eval', eval_files, eval_labels, normal_df)
         self._log_label_statistics('eval', eval_files, eval_labels, eval_case_ids, normal_df)
+
+    def gendata_kfold(self, normal_df, n_folds=5):
+        """按 case_id 生成 K-Fold 分割的數據"""
+        from sklearn.model_selection import KFold
+
+        file_list = normal_df['keypoint_filename'].unique().tolist()
+
+        # Group files by case_id
+        case_groups = {}
+        for file_name in file_list:
+            metadata_row = normal_df[normal_df['keypoint_filename'] == file_name]
+            if not metadata_row.empty:
+                case_id = metadata_row['case_id'].iloc[0]
+                case_groups.setdefault(case_id, []).append(file_name)
+
+        case_ids = sorted(case_groups.keys())
+        logging.info(f"K-Fold: {n_folds} folds, {len(case_ids)} cases total")
+
+        kf = KFold(n_splits=n_folds, shuffle=True, random_state=self.seed)
+
+        # 保存 fold 分割資訊（用於驗證和論文報告）
+        fold_split_info = {}
+
+        for fold_idx, (train_idx, eval_idx) in enumerate(kf.split(case_ids)):
+            train_case_ids = [case_ids[i] for i in train_idx]
+            eval_case_ids = [case_ids[i] for i in eval_idx]
+
+            logging.info(f"=== Fold {fold_idx}/{n_folds} ===")
+            logging.info(f"  Train cases: {len(train_case_ids)}, Eval cases: {len(eval_case_ids)}")
+
+            # 建立 fold 子目錄
+            fold_out_path = os.path.join(self.out_path, f'fold_{fold_idx}')
+            U.create_folder(fold_out_path)
+
+            # 收集 train 文件
+            train_files = []
+            for case_id in train_case_ids:
+                train_files.extend(case_groups[case_id])
+            train_labels = self._extract_labels(train_files, normal_df)
+
+            # 收集 eval 文件
+            eval_files = []
+            for case_id in eval_case_ids:
+                eval_files.extend(case_groups[case_id])
+            eval_labels = self._extract_labels(eval_files, normal_df)
+
+            logging.info(f"  Train samples: {len(train_files)}, Eval samples: {len(eval_files)}")
+
+            # 暫時切換 out_path 到 fold 子目錄
+            original_out_path = self.out_path
+            self.out_path = fold_out_path
+
+            # 生成 train 資料
+            self._generate_by_model_type('train', train_files, train_labels, normal_df)
+            self._log_label_statistics(f'fold_{fold_idx}/train', train_files, train_labels, train_case_ids, normal_df)
+
+            # 生成 eval 資料
+            self._generate_by_model_type('eval', eval_files, eval_labels, normal_df)
+            self._log_label_statistics(f'fold_{fold_idx}/eval', eval_files, eval_labels, eval_case_ids, normal_df)
+
+            # 還原 out_path
+            self.out_path = original_out_path
+
+            # 記錄分割資訊
+            fold_split_info[f'fold_{fold_idx}'] = {
+                'train_case_ids': [str(cid) for cid in train_case_ids],
+                'eval_case_ids': [str(cid) for cid in eval_case_ids],
+                'train_samples': len(train_files),
+                'eval_samples': len(eval_files),
+            }
+
+        # 保存 fold 分割資訊到 JSON（用於論文報告和驗證）
+        import json
+        split_info_path = os.path.join(self.out_path, 'kfold_split.json')
+        with open(split_info_path, 'w', encoding='utf-8') as f:
+            json.dump({
+                'n_folds': n_folds,
+                'seed': self.seed,
+                'total_cases': len(case_ids),
+                'folds': fold_split_info,
+            }, f, ensure_ascii=False, indent=2)
+        logging.info(f"K-Fold split info saved to: {split_info_path}")
 
     def _extract_labels(self, file_list, df):
         """從檔案列表提取標籤"""

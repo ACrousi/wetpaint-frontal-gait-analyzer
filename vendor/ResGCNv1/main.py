@@ -113,6 +113,10 @@ def init_parameters():
     parser.add_argument('--best_metric_criterion', type=str, default='mae', help='Best model criterion for LDL: mae, mse, or spearman')
     parser.add_argument('--task_mode', type=str, default=None, help='Task mode: regression or None (default uses LDL/classification)')
 
+    # K-Fold Cross-Validation
+    parser.add_argument('--fold_idx', type=int, default=-1, help='Fold index for K-Fold CV (-1 = disabled, uses original train/eval split)')
+    parser.add_argument('--n_folds', type=int, default=1, help='Number of folds for K-Fold CV (1 = disabled)')
+
     return parser
 
 
