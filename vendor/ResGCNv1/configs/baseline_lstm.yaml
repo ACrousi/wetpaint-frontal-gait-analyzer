@@ -1,7 +1,7 @@
 # ====================================
 # Baseline: LSTM（對比 ResGCN）
 # ====================================
-workspace_root: "../../outputs"
+workspace_root: "../../../outputs"
 
 config: resgcn_coco
 dataset: coco
@@ -23,13 +23,13 @@ dataset_args:
     label_path: coco/train_label.pkl
     eval_data_path: coco/eval_data.npy
     eval_label_path: coco/eval_label.pkl
-    use_ldl: true
+    use_ldl: false
     ldl_config:
       type: gaussian
       sigma: 1.0
       exact_iterations: 10
     custom_bin_centers: [12, 16, 20, 24, 28, 32, 36]
-    num_class: 7
+    num_class: 1
     ldl_min_label: 12
     ldl_max_label: 36
 
@@ -52,13 +52,14 @@ optimizer_args:
 lr_scheduler: cosine
 scheduler_args:
   cosine:
-    max_epoch: 200
+    max_epoch: 120
     warm_up: 10
     eta_min: 1e-6
 
-use_ldl: true
-loss_type: ordinal
+use_ldl: false
+task_mode: regression
+loss_type: mse
 ordinal_weight: 2.0
-early_stop_patience: 200
+early_stop_patience: 120
 save_interval: 30
 best_metric_criterion: spearman

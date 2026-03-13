@@ -11,6 +11,16 @@ from .initializer import Initializer
 
 
 class Processor(Initializer):
+    def _regression_pred_values(self, out):
+        """Return (N,) prediction values for regression mode with clear shape checks."""
+        if out.dim() == 1:
+            return out
+        if out.dim() == 2 and out.size(1) == 1:
+            return out[:, 0]
+        raise ValueError(
+            f'Regression mode expects model output shape (N, 1), but got {tuple(out.shape)}. '
+            'Please set dataset_args.<dataset>.num_class=1 and use_ldl=false for direct regression.'
+        )
 
     def train(self, epoch):
         self.model.train()
@@ -62,7 +72,8 @@ class Processor(Initializer):
 
             # Updating Weights
             if is_regression:
-                loss = self.loss_func(out.squeeze(-1), y)
+                pred_values = self._regression_pred_values(out)
+                loss = self.loss_func(pred_values, y)
             else:
                 loss = self.loss_func(out, y)
             loss.backward()
@@ -74,7 +85,7 @@ class Processor(Initializer):
             num_sample += x.size(0)
             if is_regression:
                 # Direct regression: compare model output with original label
-                pred_values = out.squeeze(-1)
+                pred_values = self._regression_pred_values(out)
                 target_values = original_label.float().to(self.device) if original_label is not None else y
                 batch_mae = torch.abs(pred_values - target_values).mean().item()
                 batch_mse = ((pred_values - target_values) ** 2).mean().item()
@@ -197,7 +208,8 @@ class Processor(Initializer):
 
                 # Getting Loss
                 if is_regression:
-                    loss = self.loss_func(out.squeeze(-1), y)
+                    pred_values = self._regression_pred_values(out)
+                    loss = self.loss_func(pred_values, y)
                 else:
                     loss = self.loss_func(out, y)
                 eval_loss.append(loss.item())
@@ -206,7 +218,7 @@ class Processor(Initializer):
                 num_sample += x.size(0)
                 if is_regression:
                     # Direct regression: compare model output with original label
-                    pred_values = out.squeeze(-1)
+                    pred_values = self._regression_pred_values(out)
                     target_values = original_label.float().to(self.device) if original_label is not None else y
                     eval_metric += torch.abs(pred_values - target_values).sum().item()
                     eval_mse += ((pred_values - target_values) ** 2).sum().item()
@@ -498,7 +510,7 @@ class Processor(Initializer):
                             out, _ = self.model(x, gait_params)
 
                             if is_regression:
-                                pred_values = out.squeeze(-1).cpu().numpy().tolist()
+                                pred_values = self._regression_pred_values(out).cpu().numpy().tolist()
                                 target_values = (original_label.numpy().tolist()
                                                  if original_label is not None
                                                  else y.numpy().tolist())
@@ -606,7 +618,7 @@ class Processor(Initializer):
                 if is_regression:
                     class_label = label
                     # Direct regression: pred = model output, target = original label
-                    pred_expectation = out.squeeze(-1).detach().cpu().numpy()
+                    pred_expectation = self._regression_pred_values(out).detach().cpu().numpy()
                     target_expectation = original_label.cpu().numpy() if original_label is not None else label
                     all_pred_expectations.append(pred_expectation)
                     all_target_expectations.append(target_expectation)

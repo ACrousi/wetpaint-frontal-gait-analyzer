@@ -240,7 +240,20 @@ class Initializer():
         loss_type = getattr(self.args, 'loss_type', 'ce')
         reg_weight = getattr(self.args, 'reg_weight', 0.0)
 
-        if use_ldl:
+        # Regression mode should take precedence over LDL to avoid shape mismatches
+        # when configs accidentally set both task_mode=regression and use_ldl=true.
+        if task_mode == 'regression':
+            if use_ldl:
+                logging.warning('Config conflict: task_mode=regression with use_ldl=True. '
+                                'Regression mode will override LDL.')
+            # Direct regression mode (no LDL): use MSE or MAE loss
+            if loss_type.lower() == 'mae':
+                self.loss_func = torch.nn.L1Loss().to(self.device)
+                logging.info('Loss function: L1Loss (regression mode)')
+            else:
+                self.loss_func = torch.nn.MSELoss().to(self.device)
+                logging.info('Loss function: MSELoss (regression mode)')
+        elif use_ldl:
             if reg_weight > 0:
                 from .losses import LDLLossWithL1
                 self.loss_func = LDLLossWithL1(reg_weight, self.bin_centers.to(self.device)).to(self.device)
@@ -264,14 +277,6 @@ class Initializer():
                 from .losses import ExpectationLoss
                 self.loss_func = ExpectationLoss(base_loss=loss_type).to(self.device)
                 logging.info('Loss function: ExpectationLoss with {} base loss (LDL enabled)'.format(loss_type.upper()))
-        elif task_mode == 'regression':
-            # Direct regression mode (no LDL): use MSE or MAE loss
-            if loss_type.lower() == 'mae':
-                self.loss_func = torch.nn.L1Loss().to(self.device)
-                logging.info('Loss function: L1Loss (regression mode)')
-            else:
-                self.loss_func = torch.nn.MSELoss().to(self.device)
-                logging.info('Loss function: MSELoss (regression mode)')
         else:
             self.loss_func = torch.nn.CrossEntropyLoss().to(self.device)
             logging.info('Loss function: {}'.format(self.loss_func.__class__.__name__))
