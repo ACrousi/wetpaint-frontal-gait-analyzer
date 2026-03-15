@@ -739,7 +739,7 @@ class Processor(Initializer):
                 save_dict['target_expectations'] = all_target_expectations
             if use_ldl:
                 save_dict['bin_centers'] = self.bin_centers.cpu().numpy()
-            save_path = os.path.join(vis_dir, 'extraction_{}{}.npz'.format(config_name, suffix))
+            save_path = os.path.join(vis_dir, 'extraction{}.npz'.format(suffix))
             np.savez(save_path, **save_dict)
             logging.info('Saved extraction to: {}'.format(save_path))
 

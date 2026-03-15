@@ -51,58 +51,108 @@ def load_data(npz_path):
 
 
 # ========== 1. Scatter Plot ==========
-def plot_scatter(npz_path, output_dir, figsize=(7, 7)):
+def get_aggregated_data(npz_path, agg_by_case=False):
+    data = load_data(npz_path)
+    pred = data['pred_expectations']
+    true = data['target_expectations']
+    
+    if agg_by_case and 'name' in data:
+        names = data['name']
+        case_dict = {}
+        for i, name in enumerate(names):
+            parts = str(name).split('_')
+            case_id = '_'.join(parts[:2]) if len(parts) >= 2 else str(name)
+            if case_id not in case_dict:
+                case_dict[case_id] = {'pred': [], 'true': []}
+            case_dict[case_id]['pred'].append(pred[i])
+            case_dict[case_id]['true'].append(true[i])
+            
+        case_true = []
+        case_pred = []
+        for case_id, values in case_dict.items():
+            case_true.append(np.mean(values['true']))
+            case_pred.append(np.mean(values['pred']))
+        return np.array(case_pred), np.array(case_true)
+    return pred, true
+
+def plot_scatter(npz_path, output_dir, figsize=(7, 7), npz_retard_path=None, agg_by_case=False):
     """Predicted vs True age scatter plot with regression line.
     
     Includes: identity line (y=x), linear regression, R², MAE annotation.
     """
-    data = load_data(npz_path)
-    pred = data['pred_expectations']
-    true = data['target_expectations']
+    pred_val, true_val = get_aggregated_data(npz_path, agg_by_case)
 
-    mae = np.mean(np.abs(pred - true))
-    rmse = np.sqrt(np.mean((pred - true) ** 2))
-    r2 = 1 - np.sum((true - pred) ** 2) / np.sum((true - np.mean(true)) ** 2)
-    slope, intercept, r_value, p_value, std_err = stats.linregress(true, pred)
-    spearman_r, _ = stats.spearmanr(true, pred)
+    mae_val = np.mean(np.abs(pred_val - true_val))
+    rmse_val = np.sqrt(np.mean((pred_val - true_val) ** 2))
+    r2_val = 1 - np.sum((true_val - pred_val) ** 2) / np.sum((true_val - np.mean(true_val)) ** 2)
+    slope_val, intercept_val, r_value_val, p_value_val, std_err_val = stats.linregress(true_val, pred_val)
+    spearman_r_val, _ = stats.spearmanr(true_val, pred_val)
 
     fig, ax = plt.subplots(figsize=figsize)
 
-    # Scatter points with transparency
-    ax.scatter(true, pred, alpha=0.5, s=40, c='#4C72B0', edgecolors='white', linewidth=0.5, zorder=3)
-
-    # Identity line (y=x)
-    lims = [min(true.min(), pred.min()) - 1, max(true.max(), pred.max()) + 1]
-    ax.plot(lims, lims, 'k--', alpha=0.5, linewidth=1, label='Ideal (y=x)', zorder=1)
+    # Validation data (Blue)
+    ax.scatter(true_val, pred_val, alpha=0.5, s=40, c='#4C72B0', edgecolors='white', linewidth=0.5, zorder=3, label='Validation')
 
     # Regression line
-    x_fit = np.linspace(lims[0], lims[1], 100)
-    y_fit = slope * x_fit + intercept
-    ax.plot(x_fit, y_fit, 'r-', linewidth=1.5, label=f'Fit (y={slope:.2f}x+{intercept:.2f})', zorder=2)
+    x_fit_val = np.linspace(true_val.min(), true_val.max(), 100)
+    y_fit_val = slope_val * x_fit_val + intercept_val
+    ax.plot(x_fit_val, y_fit_val, color='#4C72B0', linestyle='-', linewidth=1.5, label=f'Val Fit (y={slope_val:.2f}x+{intercept_val:.2f})', zorder=2)
+
+    all_true = list(true_val)
+    all_pred = list(pred_val)
+
+    textstr = f'[Validation]\nMAE = {mae_val:.2f}\nRMSE = {rmse_val:.2f}\nR² = {r2_val:.3f}'
+
+    if npz_retard_path:
+        pred_retard, true_retard = get_aggregated_data(npz_retard_path, agg_by_case)
+
+        mae_retard = np.mean(np.abs(pred_retard - true_retard))
+        rmse_retard = np.sqrt(np.mean((pred_retard - true_retard) ** 2))
+        r2_retard = 1 - np.sum((true_retard - pred_retard) ** 2) / np.sum((true_retard - np.mean(true_retard)) ** 2)
+        slope_retard, intercept_retard, _, _, _ = stats.linregress(true_retard, pred_retard)
+
+        # Retard data (Red)
+        ax.scatter(true_retard, pred_retard, alpha=0.5, s=40, c='#C44E52', edgecolors='white', linewidth=0.5, zorder=4, label='Retard')
+
+        x_fit_retard = np.linspace(true_retard.min(), true_retard.max(), 100)
+        y_fit_retard = slope_retard * x_fit_retard + intercept_retard
+        ax.plot(x_fit_retard, y_fit_retard, color='#C44E52', linestyle='-', linewidth=1.5, label=f'Retard Fit (y={slope_retard:.2f}x+{intercept_retard:.2f})', zorder=2)
+
+        all_true.extend(true_retard)
+        all_pred.extend(pred_retard)
+
+        textstr += f'\n\n[Retard]\nMAE = {mae_retard:.2f}\nRMSE = {rmse_retard:.2f}\nR² = {r2_retard:.3f}'
+    else:
+        textstr += f'\nSpearman ρ = {spearman_r_val:.3f}\nn = {len(true_val)}'
+
+    # Identity line (y=x)
+    lims = [min(min(all_true), min(all_pred)) - 1, max(max(all_true), max(all_pred)) + 1]
+    ax.plot(lims, lims, 'k--', alpha=0.5, linewidth=1, label='Ideal (y=x)', zorder=1)
 
     ax.set_xlim(lims)
     ax.set_ylim(lims)
     ax.set_xlabel('True Age (months)')
     ax.set_ylabel('Predicted Age (months)')
-    ax.set_title('Predicted vs True Age')
+    title = 'Predicted vs True Age' + (' (Averaged by Case ID)' if agg_by_case else '')
+    ax.set_title(title)
     ax.set_aspect('equal')
 
     # Annotation box
-    textstr = f'MAE = {mae:.2f}\nRMSE = {rmse:.2f}\nR² = {r2:.3f}\nSpearman ρ = {spearman_r:.3f}\nn = {len(true)}'
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
     ax.text(0.05, 0.95, textstr, transform=ax.transAxes, verticalalignment='top', bbox=props)
 
-    ax.legend(loc='lower right')
+    ax.legend(loc='lower right', fontsize=9)
     ax.grid(True, alpha=0.3)
 
-    save_path = os.path.join(output_dir, 'scatter_pred_vs_true.png')
+    filename = 'scatter_pred_vs_true_by_case.png' if agg_by_case else 'scatter_pred_vs_true.png'
+    save_path = os.path.join(output_dir, filename)
     fig.savefig(save_path)
     plt.close(fig)
     print(f'Saved scatter plot: {save_path}')
 
 
 # ========== 2. Bland-Altman Plot ==========
-def plot_bland_altman(npz_path, output_dir, figsize=(8, 6)):
+def plot_bland_altman(npz_path, output_dir, figsize=(8, 6), prefix=''):
     """Bland-Altman plot for agreement analysis.
     
     X-axis: mean of (pred, true)
@@ -146,7 +196,7 @@ def plot_bland_altman(npz_path, output_dir, figsize=(8, 6)):
     ax.legend(loc='upper right', fontsize=10)
     ax.grid(True, alpha=0.3)
 
-    save_path = os.path.join(output_dir, 'bland_altman.png')
+    save_path = os.path.join(output_dir, f'{prefix}bland_altman.png')
     fig.savefig(save_path)
     plt.close(fig)
     print(f'Saved Bland-Altman plot: {save_path}')
@@ -204,7 +254,7 @@ def _draw_age_group_boxplot(ax, true, pred, groups, title_suffix=''):
     ax.legend(loc='upper left')
 
 
-def plot_age_group_error(npz_path, output_dir, figsize=(9, 6)):
+def plot_age_group_error(npz_path, output_dir, figsize=(9, 6), prefix=''):
     """Generate two age-group error boxplots:
     1. Uniform 3-month intervals: 12-15, 15-18, ..., 27-30 (30+ capped to 30)
     2. Developmental stages: 12-15, 15-18, 18-24, 24-30
@@ -220,7 +270,7 @@ def plot_age_group_error(npz_path, output_dir, figsize=(9, 6)):
     groups_uniform = [(12, 15), (15, 18), (18, 21), (21, 24), (24, 27), (27, 30)]
     fig1, ax1 = plt.subplots(figsize=figsize)
     _draw_age_group_boxplot(ax1, true_capped, pred, groups_uniform, ' (3-month intervals)')
-    save_path1 = os.path.join(output_dir, 'age_group_error_uniform.png')
+    save_path1 = os.path.join(output_dir, f'{prefix}age_group_error_uniform.png')
     fig1.savefig(save_path1)
     plt.close(fig1)
     print(f'Saved age-group error plot (uniform): {save_path1}')
@@ -229,7 +279,7 @@ def plot_age_group_error(npz_path, output_dir, figsize=(9, 6)):
     groups_dev = [(12, 15), (15, 18), (18, 24), (24, 30)]
     fig2, ax2 = plt.subplots(figsize=figsize)
     _draw_age_group_boxplot(ax2, true_capped, pred, groups_dev, ' (developmental stages)')
-    save_path2 = os.path.join(output_dir, 'age_group_error_developmental.png')
+    save_path2 = os.path.join(output_dir, f'{prefix}age_group_error_developmental.png')
     fig2.savefig(save_path2)
     plt.close(fig2)
     print(f'Saved age-group error plot (developmental): {save_path2}')
@@ -418,30 +468,50 @@ def plot_umap(npz_path, output_dir, figsize=(8, 7)):
 # ========== CLI Entry Point ==========
 def main():
     parser = argparse.ArgumentParser(description='Generate paper visualizations from extract() output')
-    parser.add_argument('--npz', type=str, required=True, help='Path to extraction .npz file')
+    parser.add_argument('--dir', type=str, required=True, help='Directory containing extraction.npz and extraction_retard.npz')
     parser.add_argument('--output_dir', type=str, default='paper_figures/', help='Output directory for figures')
     parser.add_argument('--plots', type=str, nargs='+',
-                        default=['scatter', 'bland_altman', 'age_group', 'ldl', 'umap', 'summary'],
+                        default=['scatter', 'scatter_by_case', 'bland_altman', 'age_group', 'ldl', 'umap', 'summary'],
                         help='Which plots to generate')
     parser.add_argument('--samples', type=int, nargs='+', default=None,
                         help='Sample indices for LDL distribution plot')
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
+    
+    npz_path = os.path.join(args.dir, 'extraction.npz')
+    npz_retard_path = os.path.join(args.dir, 'extraction_retard.npz')
+    
+    if not os.path.exists(npz_path):
+        print(f"Error: Could not find {npz_path}")
+        return
+        
+    has_retard = os.path.exists(npz_retard_path)
 
     plot_funcs = {
-        'scatter': lambda: plot_scatter(args.npz, args.output_dir),
-        'bland_altman': lambda: plot_bland_altman(args.npz, args.output_dir),
-        'age_group': lambda: plot_age_group_error(args.npz, args.output_dir),
-        'ldl': lambda: plot_ldl_distribution(args.npz, args.output_dir, sample_indices=args.samples),
-        'umap': lambda: plot_umap(args.npz, args.output_dir),
-        'summary': lambda: print_summary(args.npz),
+        'scatter': lambda: plot_scatter(npz_path, args.output_dir, npz_retard_path=npz_retard_path if has_retard else None, agg_by_case=False),
+        'scatter_by_case': lambda: plot_scatter(npz_path, args.output_dir, npz_retard_path=npz_retard_path if has_retard else None, agg_by_case=True),
+        'bland_altman': lambda: plot_bland_altman(npz_path, args.output_dir),
+        'age_group': lambda: plot_age_group_error(npz_path, args.output_dir),
+        'ldl': lambda: plot_ldl_distribution(npz_path, args.output_dir, sample_indices=args.samples),
+        'umap': lambda: plot_umap(npz_path, args.output_dir),
+        'summary': lambda: print_summary(npz_path),
     }
+
+    if has_retard:
+        plot_funcs_retard = {
+            'bland_altman': lambda: plot_bland_altman(npz_retard_path, args.output_dir, prefix='retard_'),
+            'age_group': lambda: plot_age_group_error(npz_retard_path, args.output_dir, prefix='retard_'),
+            'summary': lambda: print_summary(npz_retard_path),
+        }
 
     for plot_name in args.plots:
         if plot_name in plot_funcs:
             print(f'\nGenerating: {plot_name}...')
             plot_funcs[plot_name]()
+            if has_retard and plot_name in plot_funcs_retard:
+                print(f'\nGenerating: retard_{plot_name}...')
+                plot_funcs_retard[plot_name]()
         else:
             print(f'Unknown plot type: {plot_name}. Available: {list(plot_funcs.keys())}')
 
