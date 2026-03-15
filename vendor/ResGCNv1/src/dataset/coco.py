@@ -143,6 +143,17 @@ class Feeder(Dataset):
                 self.data_path = eval_data_path or f"{path}/val_data.npy"
                 self.label_path = eval_label_path or f"{path}/val_label.pkl"
                 self.gait_path = gait_path or f"{path}/val_gait.npy" if use_gait else None
+        elif phase == 'retard':
+            if eval_data_path:
+                import os
+                base_dir = os.path.dirname(eval_data_path)
+                self.data_path = os.path.join(base_dir, "retard_data.npy")
+                self.label_path = os.path.join(base_dir, "retard_label.pkl")
+                self.gait_path = os.path.join(base_dir, "retard_gait.npy") if use_gait else None
+            else:
+                self.data_path = f"{path}/retard_data.npy"
+                self.label_path = f"{path}/retard_label.pkl"
+                self.gait_path = f"{path}/retard_gait.npy" if use_gait else None
         else:
             raise ValueError(f"Invalid phase: {phase}")
 

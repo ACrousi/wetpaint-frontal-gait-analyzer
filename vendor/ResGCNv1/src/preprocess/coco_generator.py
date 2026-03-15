@@ -39,6 +39,13 @@ class COCO_Generator():
         # 讀取 metadata CSV
         metadata_path = dataset_args.get('metadata_path', './outputs/2025.csv')
         self.metadata_df = pd.read_csv(metadata_path)
+        
+        # 在源頭將月齡大於 30 的限制為 30
+        if 'age_months' in self.metadata_df.columns:
+            self.metadata_df['age_months'] = pd.to_numeric(self.metadata_df['age_months'], errors='coerce').clip(upper=30.0)
+        if 'age_months_range' in self.metadata_df.columns:
+            self.metadata_df['age_months_range'] = pd.to_numeric(self.metadata_df['age_months_range'], errors='coerce').clip(upper=30.0)
+            
         logging.info(f"Loaded metadata from {metadata_path}, shape: {self.metadata_df.shape}")
 
         # 獲取檔案列表
@@ -57,10 +64,9 @@ class COCO_Generator():
             retard_df = pd.DataFrame()
             normal_df = self.metadata_df
 
-        # 生成 retard 資料
         if len(retard_df) > 0:
             logging.info(f'Phase: retard ({len(retard_df)} samples)')
-            self.gendata_for_df(retard_df, 'retard')
+            self.gendata_retard(retard_df, 'retard')
         else:
             logging.info("無 retard 資料，跳過生成")
 
@@ -73,8 +79,8 @@ class COCO_Generator():
         else:
             logging.warning("無 normal 資料，無法生成 train/eval")
 
-    def gendata_for_df(self, df, phase):
-        """從指定 DataFrame 生成資料"""
+    def gendata_retard(self, df, phase):
+        """從指定 DataFrame 生成遲緩(retard)資料"""
         file_list = df['keypoint_filename'].unique().tolist()
         
         sample_files = []
@@ -416,18 +422,38 @@ class COCO_Generator():
 
         # Statistics per label
         label_stats = defaultdict(lambda: {'case_ids': set(), 'segments': 0})
+        
+        # Binned statistics (12-15, 15-18...33-36)
+        bins = [(12, 15), (15, 18), (18, 21), (21, 24), (24, 27), (27, 30), (30, 33), (33, 36)]
+        bin_stats = {f"{b[0]}-{b[1]}": {'case_ids': set(), 'segments': 0} for b in bins}
 
         for file_name, label in zip(sample_files, sample_labels):
             if file_name in file_to_case:
                 case_id = file_to_case[file_name]
                 label_stats[label]['case_ids'].add(case_id)
                 label_stats[label]['segments'] += 1
+                
+                # Assign to bin
+                for b_start, b_end in bins:
+                    if b_start <= label < b_end or (b_end == 36 and b_start <= label <= 40.0):
+                        bin_name = f"{b_start}-{b_end}"
+                        bin_stats[bin_name]['case_ids'].add(case_id)
+                        bin_stats[bin_name]['segments'] += 1
+                        break
 
-        # Convert to arrays and log
+        # Convert to arrays and log detailed stats
         stats_array = []
         for label in sorted(label_stats.keys()):
             num_case_ids = len(label_stats[label]['case_ids'])
             num_segments = label_stats[label]['segments']
             stats_array.append([label, num_case_ids, num_segments])
 
-        logging.info(f"{phase} label statistics: {stats_array}")
+        # logging.info(f"{phase} detailed label statistics: {stats_array}")
+
+        # Log binned stats
+        logging.info(f"--- {phase} Binned Statistics (12-36 months) ---")
+        for bin_name in sorted(bin_stats.keys(), key=lambda x: int(x.split('-')[0])):
+            num_case_ids = len(bin_stats[bin_name]['case_ids'])
+            num_segments = bin_stats[bin_name]['segments']
+            logging.info(f"Bin {bin_name:>5s}: {num_case_ids:4d} cases, {num_segments:5d} segments")
+        logging.info("-" * 45)

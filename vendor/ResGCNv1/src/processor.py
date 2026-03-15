@@ -564,6 +564,56 @@ class Processor(Initializer):
         logging.info('Successful!')
         logging.info('')
 
+        # Run primary evaluation phase (Stage 1)
+        logging.info('Running normal evaluation phase ...')
+        self._run_extract_loop(self.eval_loader, cm, use_ldl, is_regression, suffix='')
+
+        # Check for retard data (Stage 2)
+        import os
+        eval_dataset = self.feeders['eval']
+        if hasattr(eval_dataset, 'data_path'):
+            base_dir = os.path.dirname(eval_dataset.data_path)
+            retard_data_path = os.path.join(base_dir, "retard_data.npy")
+            retard_label_path = os.path.join(base_dir, "retard_label.pkl")
+
+            if os.path.exists(retard_data_path) and os.path.exists(retard_label_path):
+                logging.info(f"Retard evaluation files detected at: {base_dir}")
+                logging.info("Running retard evaluation phase ...")
+
+                from torch.utils.data import DataLoader
+                from . import dataset
+
+                dataset_name = self.args.dataset.split('-')[0]
+                dataset_args = self.args.dataset_args.get(dataset_name, {}).copy()
+                dataset_path = dataset_args.pop('path', '')
+                
+                kwargs = dataset_args.copy()
+                kwargs.update({
+                    'path': '{}/{}'.format(dataset_path, self.args.dataset.replace('-', '/')),
+                    'data_shape': self.data_shape,
+                    'connect_joint': dataset.Graph(self.args.dataset).connect_joint,
+                    'debug': self.args.debug,
+                })
+
+                try:
+                    retard_dataset = type(self.feeders['eval'])('retard', **kwargs)
+                    retard_loader = DataLoader(
+                        retard_dataset, batch_size=self.eval_batch_size,
+                        num_workers=4*len(self.args.gpus), pin_memory=True,
+                        shuffle=False, drop_last=False
+                    )
+                    self._run_extract_loop(retard_loader, cm, use_ldl, is_regression, suffix='_retard')
+                except Exception as e:
+                    logging.error(f"Failed to initialize retard DataLoader: {e}")
+            else:
+                logging.info("No retard data detected. Extraction finished.")
+        else:
+            logging.info("Dataset has no data_path attribute; skipping retard detection.")
+
+        logging.info('Finish extracting!')
+        logging.info('')
+
+    def _run_extract_loop(self, loader, cm, use_ldl, is_regression, suffix=''):
         # Initialize lists to store all data
         all_data, all_labels, all_names, all_out, all_features = [], [], [], [], []
         all_locations = []
@@ -575,7 +625,7 @@ class Processor(Initializer):
         # Processing all batches
         self.model.eval()
         with torch.no_grad():
-            eval_iter = self.eval_loader if self.no_progress_bar else tqdm(self.eval_loader, dynamic_ncols=True)
+            eval_iter = loader if self.no_progress_bar else tqdm(loader, dynamic_ncols=True)
             for num, batch in enumerate(eval_iter):
                 # Unpack batch: x, y, original_label, [gait_params,] names
                 x, y, *rest = batch
@@ -643,7 +693,8 @@ class Processor(Initializer):
                 # Collecting all data
                 all_data.append(data)
                 all_labels.append(label)
-                all_names.extend(names)
+                if names is not None:
+                    all_names.extend(names)
                 all_out.append(out_processed)
                 all_features.append(feature_processed)
                 all_class_labels.append(class_label)
@@ -652,17 +703,17 @@ class Processor(Initializer):
                 
                 # Progress logging
                 if self.no_progress_bar:
-                    logging.info('Extracting batch: {}/{}'.format(num+1, len(self.eval_loader)))
+                    logging.info('Extracting batch: {}/{}'.format(num+1, len(loader)))
 
         # Concatenate all batches
-        all_data = np.concatenate(all_data, axis=0)
-        all_labels = np.concatenate(all_labels, axis=0)
-        all_out = np.concatenate(all_out, axis=0)
-        all_features = np.concatenate(all_features, axis=0)
-        all_class_labels = np.concatenate(all_class_labels, axis=0)
+        all_data = np.concatenate(all_data, axis=0) if all_data else np.array([])
+        all_labels = np.concatenate(all_labels, axis=0) if all_labels else np.array([])
+        all_out = np.concatenate(all_out, axis=0) if all_out else np.array([])
+        all_features = np.concatenate(all_features, axis=0) if all_features else np.array([])
+        all_class_labels = np.concatenate(all_class_labels, axis=0) if all_class_labels else np.array([])
         if use_ldl or is_regression:
-            all_pred_expectations = np.concatenate(all_pred_expectations, axis=0)
-            all_target_expectations = np.concatenate(all_target_expectations, axis=0)
+            all_pred_expectations = np.concatenate(all_pred_expectations, axis=0) if all_pred_expectations else np.array([])
+            all_target_expectations = np.concatenate(all_target_expectations, axis=0) if all_target_expectations else np.array([])
         if all_locations:
             all_locations = np.concatenate(all_locations, axis=0)
         else:
@@ -688,11 +739,9 @@ class Processor(Initializer):
                 save_dict['target_expectations'] = all_target_expectations
             if use_ldl:
                 save_dict['bin_centers'] = self.bin_centers.cpu().numpy()
-            save_path = os.path.join(vis_dir, 'extraction_{}.npz'.format(config_name))
+            save_path = os.path.join(vis_dir, 'extraction_{}{}.npz'.format(config_name, suffix))
             np.savez(save_path, **save_dict)
             logging.info('Saved extraction to: {}'.format(save_path))
-        logging.info('Finish extracting!')
-        logging.info('')
 
     def predict(self, input_json_paths):
         """Predict mode: inference on input JSON files
